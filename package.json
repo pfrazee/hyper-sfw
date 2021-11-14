@@ -1,0 +1,44 @@
+{
+  "name": "hyper-vcr",
+  "version": "1.0.0",
+  "description": "A p2p version-controlled repo (built on hypercore)",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "test": "ava test/*.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/atek-cloud/p2wiki.git"
+  },
+  "author": "Paul Frazee <pfrazee@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/atek-cloud/p2wiki/issues"
+  },
+  "homepage": "https://github.com/atek-cloud/p2wiki#readme",
+  "dependencies": {
+    "autobase": "latest",
+    "bytes": "^3.0.0",
+    "codecs": "^2.2.0",
+    "concat-stream": "^2.0.0",
+    "corestore": "6.0.0-alpha.3",
+    "hyperbee": "^1.6.3",
+    "hypercore": "10.0.0-alpha.12",
+    "hypercore-crypto": "^2.3.2",
+    "msgpackr": "^1.5.0",
+    "pump": "^3.0.0",
+    "through2": "^4.0.2"
+  },
+  "devDependencies": {
+    "@types/bytes": "^3.1.1",
+    "@types/codecs": "^2.2.3",
+    "@types/concat-stream": "^1.6.1",
+    "@types/node": "^16.11.7",
+    "@types/pump": "^1.1.1",
+    "@types/through2": "^2.0.36",
+    "ava": "^3.15.0",
+    "random-access-memory": "^3.1.3",
+    "typescript": "^4.4.4"
+  }
+}
