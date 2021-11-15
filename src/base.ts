@@ -3,7 +3,7 @@ import Corestore from 'corestore'
 // @ts-ignore no types available yet -prf
 import Hypercore from 'hypercore'
 
-export class BaseRepoCore {
+export class BaseWorkspaceCore {
   core: Hypercore
   constructor (public store: Corestore, public publicKey: Buffer, public secretKey?: Buffer) {
     this.core = store.get({publicKey, secretKey})

@@ -1,21 +1,57 @@
-# SFW (Synced Files Workspace)
+# Synced Files Workspace
 
-A p2p filestructure built on [Hypercore's new multiwriter Autobase](https://github.com/hypercore-protocol/autobase).
+A p2p collaborative filestructure built on [Hypercore's new multiwriter Autobase](https://github.com/hypercore-protocol/autobase).
+
+**not yet published to npm**
 
 ## TODOs
 
-- [ ] Files
-  - [ ] Blobs
-  - [ ] Conflict states
-  - [ ] History
+- [ ] Writer management (waiting on autoboot)
+- [ ] Read/write message validation
+- [x] Files
+  - [x] Blobs
+  - [x] Conflict states
+  - [x] History
+    - [ ] Read historic file versions
 - [ ] Events / reactive APIs
-- [ ] Implement indexer _apply
-- [ ] Tests
-  - [ ] All operations
-  - [ ] Conflict resolution
-- [ ] Optimizations
+- [x] Tests
+  - [x] All operations
+  - [x] Conflict resolution
+- [ ] Issues
+  - [ ] In multiple cases, I needed to read the current state to ensure sync between writers (look for HACKs in code)
+- [ ] Various
+  - [ ] Track currently-used (and no-longer-used) blobs and delete them from the blobstore
+  - [ ] Delete old index core entries and uncache when no longer needed
+  - [ ] Blobs are currently given random IDs rather than hash IDs. Would the hashing time be worth the additional dedup?
   - [ ] Determine whether the perf & reliability of copying blobs to the index is preferable to the reduced storage cost of leaving them in the input cores
   - [ ] Determine how operations on large filesets perform, e.g. renaming a folder with lots of files in it, and consider whether we should change the filetree to optimize these ops
+
+## API
+
+```typescript
+import { Workspace } from 'hyper-sfw'
+
+const ws = await Workspace.createNew(corestore)
+const ws = await Workspace.load(corestore, workspacePublicKey)
+
+ws.key // Buffer
+ws.writable // boolean
+ws.isOwner // boolean
+
+await ws.createWriter() // => WorkspaceWriter
+await ws.addWriter(publicKey: string) // => WorkspaceWriter
+await ws.removeWriter(publicKey: string) 
+
+await ws.listFiles(path?: string, opts?: any) // => FileInfo[]
+await ws.statFile(path: string) // => FileInfo | undefined
+await ws.readFile(path: string) // => Buffer | undefined
+await ws.writeFile(path: string, blob: Buffer)
+await ws.moveFile(srcPath: string, dstPath: string)
+await ws.copyFile(srcPath: string, dstPath: string)
+await ws.deleteFile(path: string)
+await ws.getChange(changeId: string) // => IndexedChange | undefined
+await ws.listHistory(opts?: any) // => IndexedChange[]
+```
 
 ## Implementation notes
 
@@ -27,82 +63,77 @@ The Hyperbee index uses the following layout:
 
 ```
 /_meta = Meta
-/files/{path: string} = IndexedFile
-/history/{num: string} = IndexedChange  // num is a sequential lexicographic number, not the change id
-/blobs/{hash: string} = IndexedBlob
+/files/{...path: string} = IndexedFile
+/changes/{id: string} = IndexedChange
+/history/{mlts: string} = string // mlts is a monotonic lexicographic timestamp
+/blobs/{id: string} = {}
+/blobchunks/{id: string}/{chunk: number} = Buffer
 
-Meta {
-  schema: 'sfw',
-  writerKeys: Buffer[]
+IndexedChange {
+  id: string // random generated ID
+  parents: string[] // IDs of changes which preceded this change
+  writer: Buffer // key of the core that authored the change
+  
+  path: string // path of file being changed
+  timestamp: Date // local clock time of change
+  details: ChangeOpPut|ChangeOpCopy|ChangeOpDel
 }
+
 IndexedFile {
   path: string // path of the file in the tree
-  blob: string // hash ref
-  change: string // last change number (not id)
-  conflicts: string[] // change numbers (not ids) currently in conflict
-}
-IndexedChange {
-  id: string, // random generated ID
-  parents: string[] // IDs of changes which preceded this change
-  writer: Buffer, // key of the core that authored the change
-  timestamp: DateTime // local clock time of change
-  path: string // path of file being changed
-  hash: string // blob hash ref (undefined on delete)
+  timestamp: Date // local clock time of change
   bytes: number // number of bytes in this blob (0 if delete or move)
-  length: number // number of chunks in this blob (0 if delete or move)
-}
-IndexedBlob {
-  writer: Buffer // key of the input core which contains this blob
-  bytes: number // number of bytes in this blob
-  start: number // starting seq number
-  end: number // ending seq number
+
+  writer: Buffer // key of the core that authored the change
+  blob: string|undefined // blob ID
+
+  change: string // last change id
+  conflicts: string[] // change ids currently in conflict
 }
 ```
 
 The oplogs include one of the following message types:
 
 ```
-SetMeta {
+SetMetaOp {
   op: 1
+  schema: string
   writerKeys: Buffer[]
 }
-Change {
+
+ChangeOp {
   op: 2
   id: string // random generated ID
   parents: string[] // IDs of changes which preceded this change
-  timestamp: DateTime // local clock time of change
   path: string // path of file being changed
-  hash: string // blob hash ref (undefined on delete)
-  bytes: number // number of bytes in this blob (0 if delete or move)
-  length: number // number of chunks in this blob (0 if delete or move)
+  timestamp: Date // local clock time of change
+  details: ChangeOpPut|ChangeOpCopy|ChangeOpDel
+
+  ChangeOpPut {
+    action: number // OP_CHANGE_ACT_PUT
+    blob: string // ID of blob to create
+    bytes: number // number of bytes in this blob
+    chunks: number // number of chunks in the blob (will follow this op)
+  }
+
+  ChangeOpCopy {
+    action: number // OP_CHANGE_ACT_COPY
+    blob: string // ID of blob to copy
+    bytes: number // number of bytes in this blob
+  }
+
+  ChangeOpDel {
+    action: number // OP_CHANGE_ACT_DEL
+  }
 }
-BlobChunk {
+
+BlobChunkOp {
   op: 3
-  value: Buffer // content
+  blob: string // blob id
+  chunk: number // chunk number
+  value: Buffer
 }
 ```
-
-### Managing writers
-
-Only the creator of the Repo maintains the Hyperbee index as a hypercore. The owner updates the `/_meta` entry to determine the current writers.
-
-This is a temporary design until Autoboot lands.
-
-### Change indexing
-
-Autobase creates a lineariazed local view of all input cores. SFW takes advantage of that to create a linear change log.
-
-Consequently, indexed changes are assigned a monotonically increasing number which is used within the index as its identifier.
-
-### Change / blob ops
-
-The oplogs write changes as `Change` messages. This can include some specific behaviors:
-
-- When writing a new blob, the `hash` will be defined `bytes` and `length` will be non-zero. The `Change` will be followed by `BlobChunk` messages which include the file data.
-- When writing a pre-existing blob, the `hash` will be defined and `bytes` and `length` will be zero.
-- When deleting a file, the `hash` will be undefined and `bytes` and `length` will be zero.
-
-A "move" operation will include two `Change` messages - a delete followed by a write.
 
 ### Folder behaviors
 
