@@ -306,7 +306,7 @@ export class Workspace {
     if (typeof opts === 'string') {
       opts = {encoding: opts}
     }
-    
+
     let blob: Buffer
     if (Buffer.isBuffer(value)) {
       blob = value
@@ -593,7 +593,7 @@ export class Workspace {
       }
 
       try {
-        console.debug('OP', this.debugId, op)
+        // console.debug('OP', this.debugId, op)
         if (structs.isSetMetaOp(op)) {
           await b.put('_meta', {
             schema: op.schema,

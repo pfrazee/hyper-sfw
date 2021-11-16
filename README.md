@@ -7,16 +7,7 @@ A p2p collaborative filestructure built on [Hypercore's new multiwriter Autobase
 ## TODOs
 
 - [ ] Writer management (waiting on autoboot)
-- [x] Read/write message validation
-- [x] Files
-  - [x] Blobs
-  - [x] Conflict states
-  - [x] History
-    - [x] Read historic file versions
 - [ ] Events / reactive APIs
-- [x] Tests
-  - [x] All operations
-  - [x] Conflict resolution
 - [ ] Issues
   - [ ] In multiple cases, I needed to read the current state to ensure sync between writers (look for HACKs in code)
 - [ ] Various
