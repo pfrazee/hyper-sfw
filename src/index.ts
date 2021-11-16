@@ -20,7 +20,7 @@ import match from 'micromatch'
 import { BaseWorkspaceCore } from './base.js'
 import { WorkspaceWriter } from './oplog.js'
 import * as structs from './structures.js'
-import { genId } from './lib/crypto.js'
+import { genId, hash } from './lib/crypto.js'
 import lock from './lib/lock.js'
 
 export * from './base.js'
@@ -327,7 +327,7 @@ export class Workspace {
 
     const release = await lock(`write:${this.key.toString('hex')}`)
     try {
-      const blobId = genId()
+      const blobId = hash(blob)
       const parents = await this._getIndexedChangeParents(path)
       await this.autobase.append(WorkspaceWriter.packop({
         op: structs.OP_CHANGE,

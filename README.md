@@ -13,7 +13,6 @@ A p2p collaborative filestructure built on [Hypercore's new multiwriter Autobase
 - [ ] Various
   - [ ] Track currently-used (and no-longer-used) blobs and delete them from the blobstore
   - [ ] Uncache old index core entries when no longer needed
-  - [ ] Blobs are currently given random IDs rather than hash IDs. Would the hashing time be worth the additional dedup?
   - [ ] Determine whether the perf & reliability of copying blobs to the index is preferable to the reduced storage cost of leaving them in the input cores
   - [ ] Determine how operations on large filesets perform, e.g. renaming a folder with lots of files in it, and consider whether we should change the filetree to optimize these ops
   - [ ] Look into an "external blobs" mode which would allow blobs to be uncached after syncing them to a local FS location
@@ -58,8 +57,8 @@ The Hyperbee index uses the following layout:
 /files/{...path: string} = IndexedFile
 /changes/{id: string} = IndexedChange
 /history/{mlts: string} = string // mlts is a monotonic lexicographic timestamp
-/blobs/{id: string} = {}
-/blobchunks/{id: string}/{chunk: number} = Buffer
+/blobs/{hash: string} = {}
+/blobchunks/{hash: string}/{chunk: number} = Buffer
 
 IndexedChange {
   id: string // random generated ID
@@ -77,7 +76,7 @@ IndexedFile {
   bytes: number // number of bytes in this blob (0 if delete or move)
 
   writer: Buffer // key of the core that authored the change
-  blob: string|undefined // blob ID
+  blob: string|undefined // blob sha256 hash
 
   change: string // last change id
   conflicts: string[] // change ids currently in conflict
@@ -103,14 +102,14 @@ ChangeOp {
 
   ChangeOpPut {
     action: number // OP_CHANGE_ACT_PUT
-    blob: string // ID of blob to create
+    blob: string // sha256 hash of blob to create
     bytes: number // number of bytes in this blob
     chunks: number // number of chunks in the blob (will follow this op)
   }
 
   ChangeOpCopy {
     action: number // OP_CHANGE_ACT_COPY
-    blob: string // ID of blob to copy
+    blob: string // sha256 hash of blob to copy
     bytes: number // number of bytes in this blob
   }
 
@@ -121,7 +120,7 @@ ChangeOp {
 
 BlobChunkOp {
   op: 3
-  blob: string // blob id
+  blob: string // sha256 hash of blob
   chunk: number // chunk number
   value: Buffer
 }
