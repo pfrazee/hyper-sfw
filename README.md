@@ -6,10 +6,11 @@ A p2p collaborative filestructure built on [Hypercore's new multiwriter Autobase
 
 ## TODOs
 
-- [ ] Writer management (waiting on autoboot)
-- [ ] Events / reactive APIs
-- [ ] Issues
-  - [ ] In multiple cases, I needed to read the current state to ensure sync between writers (look for HACKs in code)
+- Writer management (waiting on autoboot)
+- [Externalizing blobs to a separate storage and transfer protocol](https://github.com/pfrazee/hyper-sfw/issues/1)
+- Events / reactive APIs
+- BUG: In multiple cases, I needed to read the current state to ensure sync between writers (look for HACKs in code)
+- [Decaching old log messages](https://github.com/pfrazee/hyper-sfw/issues/2)
 - [ ] Various
   - [ ] Track currently-used (and no-longer-used) blobs and delete them from the blobstore
   - [ ] Uncache old index core entries when no longer needed
