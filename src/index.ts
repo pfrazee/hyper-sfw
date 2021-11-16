@@ -16,6 +16,7 @@ import pump from 'pump'
 import concat from 'concat-stream'
 import through from 'through2'
 import * as msgpackr from 'msgpackr'
+import match from 'micromatch'
 import { BaseWorkspaceCore } from './base.js'
 import { WorkspaceWriter } from './oplog.js'
 import * as structs from './structures.js'
@@ -426,6 +427,7 @@ export class Workspace {
 
   async listHistory (opts?: any): Promise<structs.IndexedChange[]> {
     const self = this
+    const matcher = typeof opts?.path === 'string' ? match.matcher(opts.path) : undefined
     return await new Promise((resolve, reject) => {
       pump(
         this.indexBee.sub('history').createReadStream(opts),
@@ -433,7 +435,13 @@ export class Workspace {
           if (typeof entry.value !== 'string') return cb()
           self.getChange(entry.value).then(
             change => {
-              if (change) this.push(change)
+              if (change) {
+                if (matcher && !matcher(change.path)) {
+                  // skip
+                } else {
+                  this.push(change)
+                }
+              }
               cb()
             },
             err => cb(err)

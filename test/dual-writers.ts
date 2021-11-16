@@ -2,7 +2,7 @@ import ava from 'ava'
 import { setupTwo } from './util/util.js'
 import * as sfw from '../src/index.js'
 
-ava.only('dual-writers individual file', async t => {
+ava('dual-writers individual file', async t => {
   const VALUES = [
     Buffer.from('Hello, world', 'utf-8'),
     Buffer.from('Hello, universe', 'utf-8')
