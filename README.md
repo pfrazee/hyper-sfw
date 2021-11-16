@@ -7,7 +7,7 @@ A p2p collaborative filestructure built on [Hypercore's new multiwriter Autobase
 ## TODOs
 
 - [ ] Writer management (waiting on autoboot)
-- [ ] Read/write message validation
+- [x] Read/write message validation
 - [x] Files
   - [x] Blobs
   - [x] Conflict states
@@ -21,10 +21,11 @@ A p2p collaborative filestructure built on [Hypercore's new multiwriter Autobase
   - [ ] In multiple cases, I needed to read the current state to ensure sync between writers (look for HACKs in code)
 - [ ] Various
   - [ ] Track currently-used (and no-longer-used) blobs and delete them from the blobstore
-  - [ ] Delete old index core entries and uncache when no longer needed
+  - [ ] Uncache old index core entries when no longer needed
   - [ ] Blobs are currently given random IDs rather than hash IDs. Would the hashing time be worth the additional dedup?
   - [ ] Determine whether the perf & reliability of copying blobs to the index is preferable to the reduced storage cost of leaving them in the input cores
   - [ ] Determine how operations on large filesets perform, e.g. renaming a folder with lots of files in it, and consider whether we should change the filetree to optimize these ops
+  - [ ] Look into an "external blobs" mode which would allow blobs to be uncached after syncing them to a local FS location
 
 ## API
 
