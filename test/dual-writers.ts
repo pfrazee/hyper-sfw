@@ -216,7 +216,7 @@ ava('dual-writers copy file', async t => {
       if (info2) {
         t.is(info2.path, '/test2.txt')
         t.truthy(info2.timestamp instanceof Date)
-        t.truthy(info2.writer.equals(writer1.publicKey))
+        t.truthy(info2.writer.equals(writer2.publicKey))
         t.truthy(typeof info2.change === 'string')
         t.is(info2.conflicts?.length, 0)
         t.is(info2.bytes, VALUES[0].length)
@@ -288,7 +288,7 @@ ava('dual-writers move file', async t => {
       if (info2) {
         t.is(info2.path, '/test2.txt')
         t.truthy(info2.timestamp instanceof Date)
-        t.truthy(info2.writer.equals(writer1.publicKey))
+        t.truthy(info2.writer.equals(writer2.publicKey))
         t.truthy(typeof info2.change === 'string')
         t.is(info2.conflicts?.length, 0)
         t.is(info2.bytes, VALUES[0].length)
