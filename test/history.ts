@@ -11,10 +11,10 @@ ava('listHistory filters', async t => {
   t.truthy(ws.key)
 
   for (let i = 0; i < 4; i++) {
-    await ws.writeFile('/test.txt', Buffer.from(''+i, 'utf8'))
+    await ws.writeFile('/test.txt', ''+i, 'utf8')
     for (let j = 0; j < 10; j++) {
-      await ws.writeFile(`/folder/test${j}.txt`, Buffer.from(''+i, 'utf8'))
-      await ws.writeFile(`/sub/folder/test${j}.txt`, Buffer.from(''+i, 'utf8'))
+      await ws.writeFile(`/folder/test${j}.txt`, ''+i, 'utf8')
+      await ws.writeFile(`/sub/folder/test${j}.txt`, ''+i, 'utf8')
     }
   }
 
@@ -33,7 +33,7 @@ ava('read historic values', async t => {
   t.truthy(ws.key)
 
   for (let i = 0; i < 10; i++) {
-    await ws.writeFile('/test.txt', Buffer.from(''+i, 'utf8'))
+    await ws.writeFile('/test.txt', ''+i, 'utf8')
   }
 
   const history = await ws.listHistory()

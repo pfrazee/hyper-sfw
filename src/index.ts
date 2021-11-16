@@ -44,6 +44,10 @@ export interface ReadFileOpts {
   encoding?: string
 }
 
+export interface WriteFileOpts {
+  encoding?: string
+}
+
 export interface WriteOpts {
   writer?: Buffer|Hypercore
   prefix?: string
@@ -277,7 +281,11 @@ export class Workspace {
     return await this._getFileInfo(indexedFile)
   }
 
-  async readFile (path: string, opts?: ReadFileOpts): Promise<Buffer|string|undefined> {
+  async readFile (path: string, opts?: string|ReadFileOpts): Promise<Buffer|string|undefined> {
+    if (typeof opts === 'string') {
+      opts = {encoding: opts}
+    }
+
     let blob
     if (typeof opts?.change === 'string') {
       const indexedChange = await this.getChange(opts.change)
@@ -294,7 +302,18 @@ export class Workspace {
     return this._getBlobData(blob, opts)
   }
 
-  async writeFile (path: string, blob: Buffer) {
+  async writeFile (path: string, value: Buffer|string, opts?: string|WriteFileOpts) {
+    if (typeof opts === 'string') {
+      opts = {encoding: opts}
+    }
+    
+    let blob: Buffer
+    if (Buffer.isBuffer(value)) {
+      blob = value
+    } else {
+      blob = Buffer.from(value, (opts?.encoding || 'utf-8') as BufferEncoding)
+    }
+
     path = `/${path.split('/').filter(Boolean).join('/')}`
     const writer = getWriterCore(this)
     const blobChunks = []
