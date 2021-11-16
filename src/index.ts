@@ -39,6 +39,11 @@ export interface WorkspaceOpts {
   indexes: WorkspaceIndex[]
 }
 
+export interface ReadFileOpts {
+  change?: string
+  encoding?: string
+}
+
 export interface WriteOpts {
   writer?: Buffer|Hypercore
   prefix?: string
@@ -272,10 +277,21 @@ export class Workspace {
     return await this._getFileInfo(indexedFile)
   }
 
-  async readFile (path: string): Promise<Buffer|undefined> {
-    const indexedFile = await this._getIndexedFile(path)
-    if (!indexedFile?.blob) return undefined
-    return this._getBlobData(indexedFile.blob)
+  async readFile (path: string, opts?: ReadFileOpts): Promise<Buffer|string|undefined> {
+    let blob
+    if (typeof opts?.change === 'string') {
+      const indexedChange = await this.getChange(opts.change)
+      if (indexedChange?.details.action === structs.OP_CHANGE_ACT_PUT) {
+        blob = (indexedChange.details as structs.ChangeOpPut).blob
+      } else if (indexedChange?.details.action === structs.OP_CHANGE_ACT_COPY) {
+        blob = (indexedChange.details as structs.ChangeOpCopy).blob
+      }
+    } else {
+      const indexedFile = await this._getIndexedFile(path)
+      blob = indexedFile?.blob
+    }
+    if (!blob) return undefined
+    return this._getBlobData(blob, opts)
   }
 
   async writeFile (path: string, blob: Buffer) {
@@ -458,8 +474,8 @@ export class Workspace {
   // blobs
   // =
 
-  async _getBlobData (blobId: string): Promise<Buffer> {
-    return await new Promise((resolve, reject) => {
+  async _getBlobData (blobId: string, opts?: ReadFileOpts): Promise<Buffer|string> {
+    const buf: Buffer = await new Promise((resolve, reject) => {
       pump(
         this.indexBee.sub('blobchunks').sub(blobId).createReadStream(),
         concat((entries: any) => {
@@ -468,6 +484,10 @@ export class Workspace {
         reject
       )
     })
+    if (opts?.encoding && opts?.encoding !== 'binary') {
+      return buf.toString(opts?.encoding as BufferEncoding)
+    }
+    return buf
   }
 
   // meta

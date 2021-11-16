@@ -26,3 +26,20 @@ ava('listHistory filters', async t => {
   t.is((await ws.listHistory({path: '/sub/folder/*'})).length, 40)
   t.is((await ws.listHistory({path: '/sub/**'})).length, 40)
 })
+
+ava('read historic values', async t => {
+  const store = new Corestore(ram)
+  const ws = await sfw.Workspace.createNew(store)
+  t.truthy(ws.key)
+
+  for (let i = 0; i < 10; i++) {
+    await ws.writeFile('/test.txt', Buffer.from(''+i, 'utf8'))
+  }
+
+  const history = await ws.listHistory()
+  t.is(history.length, 10)
+  for (let i = 0; i < history.length; i++) {
+    const v = await ws.readFile('/test.txt', {change: history[i].id, encoding: 'utf8'})
+    t.is(v, `${i}`)
+  }
+})

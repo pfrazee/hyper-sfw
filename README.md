@@ -12,7 +12,7 @@ A p2p collaborative filestructure built on [Hypercore's new multiwriter Autobase
   - [x] Blobs
   - [x] Conflict states
   - [x] History
-    - [ ] Read historic file versions
+    - [x] Read historic file versions
 - [ ] Events / reactive APIs
 - [x] Tests
   - [x] All operations
