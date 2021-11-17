@@ -46,6 +46,7 @@ export interface ChangeOpPut {
   blob: string // ID of blob to create
   bytes: number // number of bytes in this blob
   chunks: number // number of chunks in the blob (will follow this op)
+  noMerge: boolean // is this a "no merge" put?
 }
 
 export interface ChangeOpCopy {
@@ -103,6 +104,7 @@ export function isChangeOp (v: any): v is ChangeOp {
       check.type(v.details.blob, 'string')
       check.type(v.details.bytes, 'number')
       check.type(v.details.chunks, 'number')
+      check.type(v.details.noMerge, 'boolean')
     } else if (v.details.action === OP_CHANGE_ACT_COPY) {
       check.type(v.details.blob, 'string')
       check.type(v.details.bytes, 'number')    
@@ -133,7 +135,8 @@ export interface IndexedFile {
   blob: string|undefined // blob ID
 
   change: string // last change id
-  conflicts: string[] // change ids currently in conflict
+  noMerge: boolean // in no-merge mode?
+  otherChanges: string[] // other current change ids
 }
 
 export function isIndexedChange (v: any): v is IndexedChange {
@@ -151,6 +154,7 @@ export function isIndexedChange (v: any): v is IndexedChange {
       check.type(v.details.blob, 'string')
       check.type(v.details.bytes, 'number')
       check.type(v.details.chunks, 'number')
+      check.type(v.details.noMerge, 'boolean')
     } else if (v.details.action === OP_CHANGE_ACT_COPY) {
       check.type(v.details.blob, 'string')
       check.type(v.details.bytes, 'number')    
@@ -168,7 +172,8 @@ export function isIndexedFile (v: any): v is IndexedFile {
   check.is(Buffer.isBuffer(v.writer), true)
   if (v.blob) check.type(v.blob, 'string')
   check.type(v.change, 'string')
-  check.arrayType(v.conflicts, 'string')
+  check.type(v.noMerge, 'boolean')
+  check.arrayType(v.otherChanges, 'string')
   return check.valid
 }
 
@@ -182,7 +187,9 @@ export interface FileInfo {
   writer: Buffer // key of the core that authored the change
 
   change: string // last change ids
-  conflicts?: FileInfo[] // conflicting file infos
+  conflict?: boolean // in conflict?
+  noMerge?: boolean // in no-merge mode?
+  otherChanges?: FileInfo[] // conflicting file infos
 }
 
 class TypeCheck {

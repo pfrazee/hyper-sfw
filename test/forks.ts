@@ -44,8 +44,9 @@ ava('conflicting and merging writes to individual file', async t => {
     if (info1 && info2) {
       t.deepEqual(info1, info2)
     }
-    if (info1){
-      t.is(info1.conflicts?.length, 1)
+    if (info1) {
+      t.is(info1.conflict, true)
+      t.is(info1.otherChanges?.length, 1)
     }
   }
 
@@ -64,8 +65,9 @@ ava('conflicting and merging writes to individual file', async t => {
     if (info1 && info2) {
       t.deepEqual(info1, info2)
     }
-    if (info1){
-      t.is(info1.conflicts?.length, 0) // no conflicts
+    if (info1) {
+      t.is(info1.conflict, false)
+      t.is(info1.otherChanges?.length, 0) // no conflicts
     }
   }
 })
@@ -117,8 +119,9 @@ ava('conflicting and merging writes & deletes to individual file', async t => {
     if (info1 && info2) {
       t.deepEqual(info1, info2)
     }
-    if (info1){
-      t.is(info1.conflicts?.length, 1)
+    if (info1) {
+      t.is(info1.conflict, true)
+      t.is(info1.otherChanges?.length, 1)
     }
   }
 
@@ -142,7 +145,8 @@ ava('conflicting and merging writes & deletes to individual file', async t => {
       t.deepEqual(info1, info2)
     }
     if (info1){
-      t.is(info1.conflicts?.length, 0) // no conflicts
+      t.is(info1.conflict, false)
+      t.is(info1.otherChanges?.length, 0) // no conflicts
     }
   }
 })
@@ -196,7 +200,8 @@ ava('conflicting and merging writes & moves to individual file', async t => {
       t.deepEqual(info1, info2)
     }
     if (info1){
-      t.is(info1.conflicts?.length, 1)
+      t.is(info1.conflict, true)
+      t.is(info1.otherChanges?.length, 1)
     }
   }
 
@@ -213,7 +218,8 @@ ava('conflicting and merging writes & moves to individual file', async t => {
       t.deepEqual(info1, info2)
     }
     if (info1){
-      t.is(info1.conflicts?.length, 0)
+      t.is(info1.conflict, false)
+      t.is(info1.otherChanges?.length, 0)
     }
   }
 
@@ -272,7 +278,8 @@ ava('conflicting and merging writes & copies to individual file', async t => {
       t.deepEqual(info1, info2)
     }
     if (info1){
-      t.is(info1.conflicts?.length, 1)
+      t.is(info1.conflict, true)
+      t.is(info1.otherChanges?.length, 1)
     }
   }
 
@@ -289,7 +296,8 @@ ava('conflicting and merging writes & copies to individual file', async t => {
       t.deepEqual(info1, info2)
     }
     if (info1){
-      t.is(info1.conflicts?.length, 0)
+      t.is(info1.conflict, false)
+      t.is(info1.otherChanges?.length, 0)
     }
   }
 

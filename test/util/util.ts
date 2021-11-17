@@ -56,6 +56,18 @@ class Sim {
   }
 }
 
+export async function setupOne (t: any) {
+  const sim = new Sim()
+  sim.addStore()
+
+  const ws = await sim.createWorkspace(sim.stores[0])
+  t.truthy(ws.key)
+
+  t.is(ws.writers.length, 1)
+
+  return {sim, ws, writer: sim.writers[0]}
+}
+
 export async function setupTwo (t: any) {
   const sim = new Sim()
   sim.addStore()

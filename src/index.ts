@@ -46,6 +46,7 @@ export interface ReadFileOpts {
 
 export interface WriteFileOpts {
   encoding?: string
+  noMerge?: boolean
 }
 
 export interface WriteOpts {
@@ -214,8 +215,8 @@ export class Workspace {
     let parents: string[] = []
     if (indexedFile) {
       parents.push(indexedFile.change)
-      if (indexedFile.conflicts?.length) {
-        parents = parents.concat(indexedFile.conflicts)
+      if (indexedFile.otherChanges?.length) {
+        parents = parents.concat(indexedFile.otherChanges)
       }
     }
     return parents
@@ -225,11 +226,24 @@ export class Workspace {
     return this._gatherIndexedFileChangeParents(await this._getIndexedFile(path))
   }
 
+  async _getIndexedNomergeParents (path: string, writer: Buffer): Promise<string[]> {
+    const indexedFile = await this._getIndexedFile(path)
+    if (!indexedFile) return []
+
+    const parents = []
+    if (indexedFile.writer.equals(writer)) parents.push(indexedFile.change)
+    for (const changeId of indexedFile.otherChanges) {
+      const change = await this.getChange(changeId)
+      if (change && change.writer.equals(writer)) parents.push(change.id)
+    }
+    return parents
+  }
+
   async _getFileInfo (indexedFile: structs.IndexedFile): Promise<structs.FileInfo> {
     // @ts-ignore typescript isn't recognizing the filter operation
-    const conflicts: structs.IndexedChange[] = (
-      indexedFile.conflicts?.length > 0
-        ? await Promise.all(indexedFile.conflicts.map(c => this.getChange(c)))
+    const otherChanges: structs.IndexedChange[] = (
+      indexedFile.otherChanges?.length > 0
+        ? await Promise.all(indexedFile.otherChanges.map(c => this.getChange(c)))
         : []
     ).filter(Boolean)
     return {
@@ -238,12 +252,14 @@ export class Workspace {
       bytes: indexedFile.bytes,
       writer: indexedFile.writer,
       change: indexedFile.change,
-      conflicts: conflicts.map((c: structs.IndexedChange, i: number) => ({
+      noMerge: indexedFile.noMerge,
+      conflict: otherChanges.length > 0 && !indexedFile.noMerge,
+      otherChanges: otherChanges.map((c: structs.IndexedChange, i: number) => ({
         path: c.path,
         timestamp: c.timestamp,
         bytes: ('bytes' in c.details) ? c.details.bytes : 0,
         writer: c.writer,
-        change: indexedFile.conflicts[i]
+        change: indexedFile.otherChanges[i]
       }))
     }
   }
@@ -302,6 +318,29 @@ export class Workspace {
     return this._getBlobData(blob, opts)
   }
 
+  async readAllFileStates (path: string): Promise<{writer: Buffer, data: Buffer}[]> {
+    const indexedFile = await this._getIndexedFile(path)
+    if (!indexedFile) return []
+
+    const buffers = []
+    if (indexedFile.blob) {
+      buffers.push({
+        writer: indexedFile.writer,
+        data: (await this._getBlobData(indexedFile.blob)) as Buffer
+      })
+    }
+    for (const changeId of indexedFile.otherChanges) {
+      const change = await this.getChange(changeId)
+      if (change && (change.details as structs.ChangeOpPut).blob) {
+        buffers.push({
+          writer: indexedFile.writer,
+          data: (await this._getBlobData((change.details as structs.ChangeOpPut).blob)) as Buffer
+        })
+      }
+    }
+    return buffers
+  }
+
   async writeFile (path: string, value: Buffer|string, opts?: string|WriteFileOpts) {
     if (typeof opts === 'string') {
       opts = {encoding: opts}
@@ -328,7 +367,9 @@ export class Workspace {
     const release = await lock(`write:${this.key.toString('hex')}`)
     try {
       const blobId = hash(blob)
-      const parents = await this._getIndexedChangeParents(path)
+      const parents = opts?.noMerge
+        ? await this._getIndexedNomergeParents(path, writer.key)
+        : await this._getIndexedChangeParents(path)
       await this.autobase.append(WorkspaceWriter.packop({
         op: structs.OP_CHANGE,
         id: genId(),
@@ -339,7 +380,8 @@ export class Workspace {
           action: structs.OP_CHANGE_ACT_PUT,
           blob: blobId,
           chunks: blobChunks.length,
-          bytes: blob.length
+          bytes: blob.length,
+          noMerge: opts?.noMerge || false
         }
       }), null, writer)
       for (const value of blobChunks) {
@@ -366,6 +408,9 @@ export class Workspace {
       const indexedSrcFile = await this._getIndexedFile(srcPath)
       if (!indexedSrcFile) {
         throw new Error(`Cannot move ${srcPath}: file does not exist`)
+      }
+      if (indexedSrcFile.otherChanges.length) {
+        throw new Error(`Cannot move ${srcPath}: file is in conflict`)
       }
       const srcParents = this._gatherIndexedFileChangeParents(indexedSrcFile)
       const dstParents = await this._getIndexedChangeParents(dstPath)
@@ -407,6 +452,9 @@ export class Workspace {
       const indexedSrcFile = await this._getIndexedFile(srcPath)
       if (!indexedSrcFile) {
         throw new Error(`Cannot copy ${srcPath}: file does not exist`)
+      }
+      if (indexedSrcFile.otherChanges.length) {
+        throw new Error(`Cannot copy ${srcPath}: file is in conflict`)
       }
       const dstParents = await this._getIndexedChangeParents(dstPath)
       await this.autobase.append(WorkspaceWriter.packop({
@@ -613,7 +661,7 @@ export class Workspace {
           const currIndexedFile = structs.isIndexedFile(currIndexedFileEntry?.value) ? currIndexedFileEntry.value : undefined
           const currParents = this._gatherIndexedFileChangeParents(currIndexedFile)
           // @ts-ignore for some reason the isChangeOp() type guard isn't enforcing here
-          const conflicts = currParents.filter(parent => !op.parents.includes(parent))
+          const otherChanges = currParents.filter(parent => !op.parents.includes(parent))
 
           const indexedFile: structs.IndexedFile = {
             path,
@@ -624,7 +672,8 @@ export class Workspace {
             blob: undefined,
           
             change: op.id,
-            conflicts
+            noMerge: false,
+            otherChanges
           }
 
           // TODO track blobs in use and delete unused blobs if possible
@@ -634,6 +683,7 @@ export class Workspace {
               const putDetails = op.details as structs.ChangeOpPut
               indexedFile.blob = putDetails.blob
               indexedFile.bytes = putDetails.bytes
+              indexedFile.noMerge = putDetails.noMerge
               await b.put(beekey, indexedFile)
               break
             }
@@ -645,7 +695,7 @@ export class Workspace {
               break
             }
             case structs.OP_CHANGE_ACT_DEL:
-              if (conflicts.length === 0) {
+              if (otherChanges.length === 0) {
                 await b.del(beekey)
               } else {
                 await b.put(beekey, indexedFile)

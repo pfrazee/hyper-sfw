@@ -32,7 +32,8 @@ ava('single-writer individual file', async t => {
       t.truthy(info.timestamp instanceof Date)
       t.truthy(info.writer.equals(ws.writers[0].publicKey))
       t.truthy(typeof info.change === 'string')
-      t.is(info.conflicts?.length, 0)
+      t.is(info.conflict, false)
+      t.is(info.otherChanges?.length, 0)
       t.is(info.bytes, VALUES[0].length)
     }
     const info2 = await ws.statFile('test.txt')
@@ -77,7 +78,8 @@ ava('single-writer individual file', async t => {
       t.truthy(info.timestamp instanceof Date)
       t.truthy(info.writer.equals(ws.writers[0].publicKey))
       t.truthy(typeof info.change === 'string')
-      t.is(info.conflicts?.length, 0)
+      t.is(info.conflict, false)
+      t.is(info.otherChanges?.length, 0)
       t.is(info.bytes, VALUES[1].length)
     }
     const info2 = await ws.statFile('test.txt')
@@ -148,7 +150,8 @@ ava('single-writer individual file', async t => {
       t.truthy(info.timestamp instanceof Date)
       t.truthy(info.writer.equals(ws.writers[0].publicKey))
       t.truthy(typeof info.change === 'string')
-      t.is(info.conflicts?.length, 0)
+      t.is(info.conflict, false)
+      t.is(info.otherChanges?.length, 0)
       t.is(info.bytes, VALUES[0].length)
     }
     const info2 = await ws.statFile('test.txt')
@@ -204,7 +207,8 @@ ava('single-writer multiple files', async t => {
       t.truthy(info.timestamp instanceof Date)
       t.truthy(info.writer.equals(ws.writers[0].publicKey))
       t.truthy(typeof info.change === 'string')
-      t.is(info.conflicts?.length, 0)
+      t.is(info.conflict, false)
+      t.is(info.otherChanges?.length, 0)
       t.is(info.bytes, VALUES[0].length)
     }
     const info2 = await ws.statFile('test1.txt')
@@ -218,7 +222,8 @@ ava('single-writer multiple files', async t => {
       t.truthy(info.timestamp instanceof Date)
       t.truthy(info.writer.equals(ws.writers[0].publicKey))
       t.truthy(typeof info.change === 'string')
-      t.is(info.conflicts?.length, 0)
+      t.is(info.conflict, false)
+      t.is(info.otherChanges?.length, 0)
       t.is(info.bytes, VALUES[1].length)
     }
     const info2 = await ws.statFile('test2.txt')
@@ -295,7 +300,8 @@ ava('single-writer individual file in a folder', async t => {
       t.truthy(info.timestamp instanceof Date)
       t.truthy(info.writer.equals(ws.writers[0].publicKey))
       t.truthy(typeof info.change === 'string')
-      t.is(info.conflicts?.length, 0)
+      t.is(info.conflict, false)
+      t.is(info.otherChanges?.length, 0)
       t.is(info.bytes, VALUES[0].length)
     }
     const info2 = await ws.statFile('folder/test.txt')
@@ -340,7 +346,8 @@ ava('single-writer individual file in a folder', async t => {
       t.truthy(info.timestamp instanceof Date)
       t.truthy(info.writer.equals(ws.writers[0].publicKey))
       t.truthy(typeof info.change === 'string')
-      t.is(info.conflicts?.length, 0)
+      t.is(info.conflict, false)
+      t.is(info.otherChanges?.length, 0)
       t.is(info.bytes, VALUES[1].length)
     }
     const info2 = await ws.statFile('folder/test.txt')
@@ -411,7 +418,8 @@ ava('single-writer individual file in a folder', async t => {
       t.truthy(info.timestamp instanceof Date)
       t.truthy(info.writer.equals(ws.writers[0].publicKey))
       t.truthy(typeof info.change === 'string')
-      t.is(info.conflicts?.length, 0)
+      t.is(info.conflict, false)
+      t.is(info.otherChanges?.length, 0)
       t.is(info.bytes, VALUES[0].length)
     }
     const info2 = await ws.statFile('folder/test.txt')
@@ -466,7 +474,7 @@ ava('single-writer copy file', async t => {
       t.truthy(info1.timestamp instanceof Date)
       t.truthy(info1.writer.equals(ws.writers[0].publicKey))
       t.truthy(typeof info1.change === 'string')
-      t.is(info1.conflicts?.length, 0)
+      t.is(info1.otherChanges?.length, 0)
       t.is(info1.bytes, VALUES[0].length)
     }
     const info2 = await ws.statFile('/test2.txt')
@@ -476,7 +484,7 @@ ava('single-writer copy file', async t => {
       t.truthy(info2.timestamp instanceof Date)
       t.truthy(info2.writer.equals(ws.writers[0].publicKey))
       t.truthy(typeof info2.change === 'string')
-      t.is(info2.conflicts?.length, 0)
+      t.is(info2.otherChanges?.length, 0)
       t.is(info2.bytes, VALUES[0].length)
     }
   }
@@ -548,7 +556,7 @@ ava('single-writer move file', async t => {
       t.truthy(info2.timestamp instanceof Date)
       t.truthy(info2.writer.equals(ws.writers[0].publicKey))
       t.truthy(typeof info2.change === 'string')
-      t.is(info2.conflicts?.length, 0)
+      t.is(info2.otherChanges?.length, 0)
       t.is(info2.bytes, VALUES[0].length)
     }
   }

@@ -6,13 +6,13 @@ A p2p collaborative filestructure built on [Hypercore's new multiwriter Autobase
 
 ## TODOs
 
-- Writer management (waiting on autoboot)
 - [Externalizing blobs to a separate storage and transfer protocol](https://github.com/pfrazee/hyper-sfw/issues/1)
+- [Decaching old core messages](https://github.com/pfrazee/hyper-sfw/issues/2)
+- Writer management (waiting on autoboot)
 - Events / reactive APIs
 - BUG: In multiple cases, I needed to read the current state to ensure sync between writers (look for HACKs in code)
-- [Decaching old core messages](https://github.com/pfrazee/hyper-sfw/issues/2)
 
-## API
+## Example usage
 
 ```typescript
 import { Workspace } from 'hyper-sfw'
@@ -20,23 +20,33 @@ import { Workspace } from 'hyper-sfw'
 const ws = await Workspace.createNew(corestore)
 const ws = await Workspace.load(corestore, workspacePublicKey)
 
-ws.key // Buffer
-ws.writable // boolean
-ws.isOwner // boolean
+// basic file ops
+// =
 
-await ws.createWriter() // => WorkspaceWriter
-await ws.addWriter(publicKey: string) // => WorkspaceWriter
-await ws.removeWriter(publicKey: string) 
+await ws.writeFile('/file.txt', 'Hello, world!')
+await ws.statFile('/file.txt') /* => {
+  path: '/file.txt',
+  timestamp: Date(January 1, 1969),
+  bytes: 13,
+  writer: Buffer<...>,
+  change: 'b3c316fdc136bde5',
+  conflict: false,
+  noMerge: false
+  otherChanges: []
+} */
+await ws.listFiles() // => [{...}]
+await ws.readFile('/file.txt', 'utf-8') // => 'Hello, world!'
 
-await ws.listFiles(path?: string, opts?: any) // => FileInfo[]
-await ws.statFile(path: string) // => FileInfo | undefined
-await ws.readFile(path: string) // => Buffer | undefined
-await ws.writeFile(path: string, blob: Buffer)
-await ws.moveFile(srcPath: string, dstPath: string)
-await ws.copyFile(srcPath: string, dstPath: string)
-await ws.deleteFile(path: string)
-await ws.getChange(changeId: string) // => IndexedChange | undefined
-await ws.listHistory(opts?: any) // => IndexedChange[]
+await ws.copyFile('/file.txt', '/file2.txt')
+await ws.moveFile('/file2.txt', '/file3.txt')
+await ws.deleteFile('/file3.txt')
+
+// history
+// =
+
+await ws.listHistory()
+await ws.listHistory({path: '/directory/*'})
+await ws.listHistory({path: '/file.txt'})
 ```
 
 ## Implementation notes
@@ -74,7 +84,8 @@ IndexedFile {
   blob: string|undefined // blob sha256 hash
 
   change: string // last change id
-  conflicts: string[] // change ids currently in conflict
+  noMerge: boolean // in no-merge mode?
+  otherChanges: string[] // other current change ids
 }
 ```
 
@@ -100,6 +111,7 @@ ChangeOp {
     blob: string // sha256 hash of blob to create
     bytes: number // number of bytes in this blob
     chunks: number // number of chunks in the blob (will follow this op)
+    noMerge: boolean // is this a "no merge" put?
   }
 
   ChangeOpCopy {
@@ -130,3 +142,27 @@ Changes to a folder (renames, moves, deletes) must be written as individual `Cha
 ### Detecting conflicts in changes
 
 All change operations have a random ID and list the parent changes by their ID. When the indexer handles a change, it compares the listed parents to the current file's "head changes." If one of the head changes is not included in the list of parents, the file is put in conflict state. Conflict state is tracked by a list of change numbers in the file entry.
+
+### No-merge writes
+
+You can write a file with the `noMerge` option set to true. This circumvents the merging behavior, essentially causing the file to go into "conflict" on purpose. (SFW notes that it is a `noMerge` write and accordingly doesn't indicate the write as a conflict.)
+
+Non-merged files essentially maintain separate copies for each writer. You can fetch each writer's copy using `readAllFileStates()`.
+
+This is particularly useful for [Y.js](https://yjs.dev), as each writer's state updates can be written separately and then merged on read.
+
+```js
+import * as Y from 'yjs'
+
+const ydoc = new Y.Doc()
+ydoc.getText().insert(0, 'Hello, world!')
+
+// write the state update in "no merge" mode
+await ws.writeFile('/ydoc.txt', Buffer.from(Y.encodeStateAsUpdate(ydoc)), {noMerge: true})
+
+// now create another ydoc instance and read each writer's updates into it
+const ydoc2 = new Y.Doc()
+const state = await ws.readAllFileStates('/ydoc.txt')
+for (const item of state) Y.applyUpdate(ydoc2, item.data)
+String(ydoc2.getText()) // 'Hello, world!'
+```
