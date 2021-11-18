@@ -1,12 +1,14 @@
 import bytes from 'bytes'
 
-export const OP_SET_META = 1
+export const OP_DECLARE = 1
 export const OP_CHANGE = 2
 export const OP_BLOB_CHUNK = 3
 
 export const OP_CHANGE_ACT_PUT = 1
 export const OP_CHANGE_ACT_COPY = 2
 export const OP_CHANGE_ACT_DEL = 3
+export const OP_CHANGE_ACT_PUT_WRITER = 4
+export const OP_CHANGE_ACT_DEL_WRITER = 5
 
 export const BLOB_CHUNK_BYTE_LENGTH = bytes('4mb')
 
@@ -14,7 +16,7 @@ export const BLOB_CHUNK_BYTE_LENGTH = bytes('4mb')
 
 Index bee's structure:
 
-/_meta = Meta
+/_meta = IndexedMeta
 /files/{...path: string} = IndexedFile
 /changes/{id: string} = IndexedChange
 /history/{mlts: string} = string // mlts is a monotonic lexicographic timestamp
@@ -30,9 +32,9 @@ export interface Op {
   op: number
 }
 
-export interface SetMetaOp extends Op {
-  schema: string
-  writerKeys: Buffer[]
+export interface DeclareOp extends Op {
+  index: Buffer // key of the owner's index bee
+  timestamp: Date // local clock time of declaration
 }
 
 export interface BlobChunkOp extends Op {
@@ -59,23 +61,33 @@ export interface ChangeOpDel {
   action: number // OP_CHANGE_ACT_DEL
 }
 
+export interface ChangeOpPutWriter {
+  action: number // OP_CHANGE_ACT_PUT_WRITER
+  key: Buffer // writer's key
+  name?: string // writer's name
+  admin?: boolean // is admin?
+}
+
+export interface ChangeOpDelWriter {
+  action: number // OP_CHANGE_ACT_DEL_WRITER
+  key: Buffer // writer's key
+}
+
 export interface ChangeOp extends Op {
   id: string // random generated ID
   parents: string[] // IDs of changes which preceded this change
   
   path: string // path of file being changed
   timestamp: Date // local clock time of change
-  details: ChangeOpPut|ChangeOpCopy|ChangeOpDel
+  details: ChangeOpPut|ChangeOpCopy|ChangeOpDel|ChangeOpPutWriter|ChangeOpDelWriter
 }
 
-export function isSetMetaOp (v: any): v is SetMetaOp {
+export function isDeclareOp (v: any): v is DeclareOp {
   if (!v) return false
   const check = new TypeCheck()
-  check.is(v.op, OP_SET_META)
-  check.type(v.schema, 'string')
-  if (v.writerKeys) {
-    check.arrayIs(v.writerKeys, (item: any) => Buffer.isBuffer(item))
-  }
+  check.is(v.op, OP_DECLARE)
+  check.is(Buffer.isBuffer(v.index), true)
+  check.is(v.timestamp instanceof Date, true)
   return check.valid
 }
 
@@ -99,22 +111,28 @@ export function isChangeOp (v: any): v is ChangeOp {
   check.is(v.timestamp instanceof Date, true)
   check.type(v.details, 'object')
   if (v.details) {
-    check.type(v.details.action, 'number')
-    if (v.details.action === OP_CHANGE_ACT_PUT) {
-      check.type(v.details.blob, 'string')
-      check.type(v.details.bytes, 'number')
-      check.type(v.details.chunks, 'number')
-      check.type(v.details.noMerge, 'boolean')
-    } else if (v.details.action === OP_CHANGE_ACT_COPY) {
-      check.type(v.details.blob, 'string')
-      check.type(v.details.bytes, 'number')    
-    }
+    validateChangeAction(check, v)
   }
   return check.valid
 }
 
 // indexed data
 // =
+
+export interface IndexedMetaWriter {
+  key: Buffer // writer key
+  name: string // user-facing user name
+  admin: boolean // can assign other writers?
+}
+
+export interface IndexedMeta {
+  owner: Buffer // owner key
+  ownerIndex: Buffer // owner's index key
+  writers: IndexedMetaWriter[]
+  timestamp: Date // local clock time of last change
+  change: string // last change id
+  otherChanges: string[] // other current change ids
+}
 
 export interface IndexedChange {
   id: string // random generated ID
@@ -123,12 +141,12 @@ export interface IndexedChange {
   
   path: string // path of file being changed
   timestamp: Date // local clock time of change
-  details: ChangeOpPut|ChangeOpCopy|ChangeOpDel
+  details: ChangeOpPut|ChangeOpCopy|ChangeOpDel|ChangeOpPutWriter|ChangeOpDelWriter
 }
 
 export interface IndexedFile {
   path: string // path of the file in the tree
-  timestamp: Date // local clock time of change
+  timestamp: Date // local clock time of last change
   bytes: number // number of bytes in this blob (0 if delete or move)
 
   writer: Buffer // key of the core that authored the change
@@ -137,6 +155,19 @@ export interface IndexedFile {
   change: string // last change id
   noMerge: boolean // in no-merge mode?
   otherChanges: string[] // other current change ids
+}
+
+export function isIndexedMeta (v: any): v is IndexedMeta {
+  if (!v) return false
+  const check = new TypeCheck()
+  check.is(Buffer.isBuffer(v.owner), true)
+  check.is(Buffer.isBuffer(v.ownerIndex), true)
+  check.arrayIs(v.writers, (w: any) => Buffer.isBuffer(w.key) && typeof w.name === 'string' && typeof w.admin === 'boolean')
+  check.is(v.timestamp instanceof Date, true)
+  check.type(v.change, 'string')
+  check.arrayType(v.otherChanges, 'string')
+  check.type(v.details, 'object')
+  return check.valid
 }
 
 export function isIndexedChange (v: any): v is IndexedChange {
@@ -149,16 +180,7 @@ export function isIndexedChange (v: any): v is IndexedChange {
   check.is(v.timestamp instanceof Date, true)
   check.type(v.details, 'object')
   if (v.details) {
-    check.type(v.details.action, 'number')
-    if (v.details.action === OP_CHANGE_ACT_PUT) {
-      check.type(v.details.blob, 'string')
-      check.type(v.details.bytes, 'number')
-      check.type(v.details.chunks, 'number')
-      check.type(v.details.noMerge, 'boolean')
-    } else if (v.details.action === OP_CHANGE_ACT_COPY) {
-      check.type(v.details.blob, 'string')
-      check.type(v.details.bytes, 'number')    
-    }
+    validateChangeAction(check, v)
   }
   return check.valid
 }
@@ -190,6 +212,28 @@ export interface FileInfo {
   conflict?: boolean // in conflict?
   noMerge?: boolean // in no-merge mode?
   otherChanges?: FileInfo[] // conflicting file infos
+}
+
+// internal methods
+// =
+
+function validateChangeAction (check: TypeCheck, v: any) {
+  check.type(v.details.action, 'number')
+  if (v.details.action === OP_CHANGE_ACT_PUT) {
+    check.type(v.details.blob, 'string')
+    check.type(v.details.bytes, 'number')
+    check.type(v.details.chunks, 'number')
+    check.type(v.details.noMerge, 'boolean')
+  } else if (v.details.action === OP_CHANGE_ACT_COPY) {
+    check.type(v.details.blob, 'string')
+    check.type(v.details.bytes, 'number')    
+  } else if (v.details.action === OP_CHANGE_ACT_PUT_WRITER) {
+    check.is(Buffer.isBuffer(v.details.key), true)
+    if ('name' in v.details) check.type(v.details.name, 'string')
+    if ('admin' in v.details) check.type(v.details.admin, 'boolean')
+  } else if (v.details.action === OP_CHANGE_ACT_DEL_WRITER) {
+    check.is(Buffer.isBuffer(v.details.key), true)
+  }
 }
 
 class TypeCheck {

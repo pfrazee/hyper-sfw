@@ -1,8 +1,8 @@
-# Synced Files Workspace
+# HSFW: Hyper Synced Files Workspace
 
-A p2p collaborative filestructure built on [Hypercore's new multiwriter Autobase](https://github.com/hypercore-protocol/autobase).
+Dropbox-like p2p file syncing built on [Hypercore's new multiwriter Autobase](https://github.com/hypercore-protocol/autobase).
 
-**not yet published to npm**
+**Not yet published to npm**
 
 ## TODOs
 
@@ -15,7 +15,7 @@ A p2p collaborative filestructure built on [Hypercore's new multiwriter Autobase
 ## Example usage
 
 ```typescript
-import { Workspace } from 'hyper-sfw'
+import { Workspace } from 'hsfw'
 
 const ws = await Workspace.createNew(corestore)
 const ws = await Workspace.load(corestore, workspacePublicKey)

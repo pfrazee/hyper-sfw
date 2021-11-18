@@ -20,8 +20,10 @@ import match from 'micromatch'
 import { BaseWorkspaceCore } from './base.js'
 import { WorkspaceWriter } from './oplog.js'
 import * as structs from './structures.js'
+import { WriterCtrlExtension } from './wire-extensions/hsfw-writerctrl.js'
 import { genId, hash } from './lib/crypto.js'
 import lock from './lib/lock.js'
+import { toBuffer, toHex } from './lib/util.js'
 
 export * from './base.js'
 export * from './oplog.js'
@@ -29,12 +31,19 @@ export * from './structures.js'
 
 const mlts = MonotonicLexicographicTimestamp()
 
+export interface KeyPair {
+  publicKey: Buffer
+  secretKey?: Buffer
+}
+
 export interface WorkspaceMeta {
   schema: string
   writerKeys: string[]
 }
 
 export interface WorkspaceOpts {
+  store: Corestore
+  swarmKeyPair: KeyPair
   writers?: WorkspaceWriter[]
   indexes: WorkspaceIndex[]
 }
@@ -54,17 +63,27 @@ export interface WriteOpts {
   prefix?: string
 }
 
+export interface WorkspaceIndexExtensions {
+  writerCtrl?: WriterCtrlExtension
+}
+
 export class WorkspaceIndex extends BaseWorkspaceCore {
+  extensions: WorkspaceIndexExtensions = {}
+  constructor (public store: Corestore, public publicKey: Buffer, public secretKey?: Buffer) {
+    super(store, publicKey, secretKey)
+    this.extensions.writerCtrl = new WriterCtrlExtension(this.core)
+  }
+
   static createNew (store: Corestore) {
     const keyPair = crypto.keyPair()
     return new WorkspaceIndex(store, keyPair.publicKey, keyPair.secretKey)
   }
 
-  static load (store: Corestore, publicKey: string, secretKey?: string) {
+  static load (store: Corestore, publicKey: string|Buffer, secretKey?: string|Buffer) {
     return new WorkspaceIndex(
       store,
-      Buffer.from(publicKey, 'hex'),
-      secretKey ? Buffer.from(secretKey, 'hex') : undefined
+      toBuffer(publicKey),
+      secretKey ? toBuffer(secretKey) : undefined
     )
   }
 }
@@ -75,11 +94,15 @@ export class Workspace {
   autobase: Autobase
   indexBee: Hyperbee
   meta: WorkspaceMeta|undefined
+  store: Corestore
   writers: WorkspaceWriter[]
   indexes: WorkspaceIndex[]
-  constructor (public store: Corestore, {writers, indexes}: WorkspaceOpts) {
+  swarmKeyPair: KeyPair
+  constructor ({store, writers, indexes, swarmKeyPair}: WorkspaceOpts) {
+    this.store = store
     this.writers = writers || []
     this.indexes = indexes
+    this.swarmKeyPair = swarmKeyPair
     const inputs = this.writers.map(w => w.core)
     const defaultInput = inputs.find(core => core.writable)
 
@@ -100,32 +123,72 @@ export class Workspace {
     })
   }
 
-  static async createNew (store: Corestore) {
-    const writer = await WorkspaceWriter.createNew(store)
+  [Symbol.for('nodejs.util.inspect.custom')] (depth: number, opts: any) {
+    let indent = ''
+    if (typeof opts.indentationLvl === 'number') {
+      while (indent.length < opts.indentationLvl) indent += ' '
+    }
+
+    const inspectWsWriter = (w: WorkspaceWriter) => {
+      return (
+        indent + '    {\n' +
+        indent + '      key: ' + opts.stylize(toHex(w.publicKey), 'string') + '\n' +
+        indent + '      name: ' + opts.stylize(w.name, 'string') + '\n' +
+        indent + '      admin: ' + opts.stylize(w.isAdmin, 'boolean') + '\n' +
+        indent + '      owner: ' + opts.stylize(w.isOwner, 'boolean') + '\n' +
+        indent + '      writable: ' + opts.stylize(w.core.writable, 'boolean') + '\n' +
+        indent + '    }\n'
+      )
+    }
+    const inspectWsIndex = (idx: WorkspaceIndex) => {
+      return (
+        indent + '    {\n' +
+        indent + '      key: ' + opts.stylize(toHex(idx.publicKey), 'string') + '\n' +
+        indent + '      writable: ' + opts.stylize(idx.core.writable, 'boolean') + '\n' +
+        indent + '    }\n'
+      )
+    }
+
+    return this.constructor.name + '(\n' +
+      indent + '  key: ' + opts.stylize((toHex(this.key)), 'string') + '\n' +
+      indent + '  writable: ' + opts.stylize(this.writable, 'boolean') + '\n' +
+      indent + '  admin: ' + opts.stylize(this.isAdmin, 'boolean') + '\n' +
+      indent + '  owner: ' + opts.stylize(this.isOwner, 'boolean') + '\n' +
+      indent + '  swarmPubKey: ' + opts.stylize(toHex(this.swarmKeyPair.publicKey), 'string') + '\n' +
+      indent + '  writers: [\n' + this.writers.map(inspectWsWriter).join('') + '  ]\n' +
+      indent + '  indexes: [\n' + this.indexes.map(inspectWsIndex).join('') + '  ]\n' +
+      indent + ')'
+  }
+
+  static async createNew (store: Corestore, swarmKeyPair: KeyPair) {
+    const writer = await WorkspaceWriter.createNew(store, {isOwner: true, isAdmin: true})
     await writer.core.ready()
     const index = WorkspaceIndex.createNew(store)
     await index.core.ready()
-    const workspace = new Workspace(store, {
+    const workspace = new Workspace({
+      store,
+      swarmKeyPair,
       writers: [writer],
       indexes: [index]
     })
     await workspace.ready()
-    await workspace._persistMeta()
+    await workspace._writeDeclaration()
     return workspace
   }
 
-  static async load (store: Corestore, publicKey: string) {
-    const remoteIndex = WorkspaceIndex.load(store, publicKey)
-    await remoteIndex.core.ready()
+  static async load (store: Corestore, swarmKeyPair: KeyPair, publicKey: string) {
+    const ownerWriter = await WorkspaceWriter.load(store, publicKey, undefined, {isOwner: true, isAdmin: true})
+    await ownerWriter.core.ready()
     const localIndex = WorkspaceIndex.createNew(store)
     await localIndex.core.ready()
-    const workspace = new Workspace(store, {
-      writers: [],
-      indexes: [remoteIndex, localIndex]
+    const workspace = new Workspace({
+      store,
+      swarmKeyPair,
+      writers: [ownerWriter],
+      indexes: [localIndex]
     })
     await workspace.ready()
-    await workspace._loadMeta()
-    await workspace._watchMeta()
+    await workspace._loadFromDeclaration(ownerWriter.core)
     return workspace
   }
 
@@ -135,15 +198,9 @@ export class Workspace {
   }
 
   get key () {
-    return this.indexes[0].publicKey
-  }
-
-  get writable () {
-    return !!this.autobase.inputs.find((core: Hypercore) => core.writable)
-  }
-
-  get isOwner () {
-    return this.indexes[0].writable
+    const owner = this.getOwner()
+    if (owner) return owner.publicKey
+    throw new Error('No owner writer set')
   }
 
   serialize () {
@@ -165,8 +222,56 @@ export class Workspace {
   // writers
   // =
 
-  async createWriter () {
-    const writer = WorkspaceWriter.createNew(this.store)
+  getOwner () {
+    return this.writers.find(w => w.isOwner)
+  }
+
+  get isOwner () {
+    return Boolean(this.getOwner()?.core.writable)
+  }
+
+  getWriter () {
+    return this.writers.find(w => w.core.writable)
+  }
+
+  get writable () {
+    return Boolean(this.getWriter())
+  }
+
+  get isAdmin () {
+    return Boolean(this.getWriter()?.isAdmin)
+  }
+
+  async listWriters () {
+    // TODO
+  }
+
+  async putWriter () {
+    // TODO
+  }
+
+  async delWriter () {
+    // TODO
+  }
+
+  createInvite () {
+    return this.indexes[0].extensions.writerCtrl?.createInvite(this.swarmKeyPair.publicKey)
+  }
+
+  listInvites () {
+    // TODO
+  }
+
+  delInvite () {
+    // TODO
+  }
+
+  useInvite (invite: string) {
+    this.indexes[0].extensions.writerCtrl?.useInvite(invite, getWriterCore(this).key)
+  }
+
+  async _createWriter () {
+    const writer = WorkspaceWriter.createNew(this.store, {isAdmin: false, isOwner: false, name: ''})
     await writer.core.ready()
     this.writers.push(writer)
     this.autobase.addInput(writer.core)
@@ -174,8 +279,8 @@ export class Workspace {
     return writer
   }
 
-  async addWriter (publicKey: string) {
-    const writer = WorkspaceWriter.load(this.store, publicKey)
+  async _addWriter (publicKey: string) {
+    const writer = WorkspaceWriter.load(this.store, publicKey, undefined, {isAdmin: false, isOwner: false, name: ''})
     await writer.core.ready()
     this.writers.push(writer)
     await this.autobase.addInput(writer.core)
@@ -183,7 +288,7 @@ export class Workspace {
     return writer
   }
 
-  async removeWriter (publicKey: string|Buffer) {
+  async _removeWriter (publicKey: string|Buffer) {
     publicKey = (Buffer.isBuffer(publicKey)) ? publicKey : Buffer.from(publicKey, 'hex')
     const i = this.writers.findIndex(w => w.publicKey.equals(publicKey as Buffer))
     if (i === -1) throw new Error('Writer not found')
@@ -560,6 +665,31 @@ export class Workspace {
   // meta
   // =
 
+  async _writeDeclaration () {
+    await this.autobase.append(WorkspaceWriter.packop({
+      op: structs.OP_DECLARE,
+      index: this.indexes[0].core.key,
+      timestamp: new Date()
+    }), null, getWriterCore(this))
+  }
+
+  async _readDeclaration (core: Hypercore): Promise<structs.DeclareOp> {
+    const chunk = await this.autobase._getInputNode(core, 1)
+    const op = WorkspaceWriter.unpackop(chunk.value)
+    if (structs.isDeclareOp(op)) {
+      return op
+    }
+    throw new Error(`Declaration Op not found`)
+  }
+
+  async _loadFromDeclaration (core: Hypercore): Promise<void> {
+    const declOp = await this._readDeclaration(core)
+    const ownerIndex = WorkspaceIndex.load(this.store, declOp.index)
+    await ownerIndex.core.ready()
+    this.indexes.push(ownerIndex)
+    this.autobase.addDefaultIndex(ownerIndex.core)
+  }
+
   _watchMeta () {
     // TODO doesnt quite work
     /*this.indexes[0].core.on('append', () => {
@@ -570,7 +700,7 @@ export class Workspace {
 
   async _loadMeta () {
     // TODO doesnt quite work
-    /*const meta = (await this.indexBee.get('_meta'))?.value || {schema: 'sfw', writerKeys: []}
+    /*const meta = (await this.indexBee.get('_meta'))?.value || {schema: 'hsfw', writerKeys: []}
     meta.writerKeys = meta.writerKeys.map((buf: Buffer) => buf.toString('hex'))
     
     const release = await lock(`loadMeta:${this.key.toString('hex')}`)
@@ -595,11 +725,11 @@ export class Workspace {
     // TODO doesnt quite work
     /*
     if (!this.isOwner) return
-    this.meta = {schema: 'sfw', writerKeys: this.writers.map(w => w.publicKey.toString('hex'))}
+    this.meta = {schema: 'hsfw', writerKeys: this.writers.map(w => w.publicKey.toString('hex'))}
     const writer = getWriterCore(this)
     const release = await lock(`write:${this.key.toString('hex')}`)
     try {
-      const meta = {op: structs.OP_SET_META, schema: 'sfw', writerKeys: this.writers.map(w => w.publicKey)}
+      const meta = {op: structs.OP_SET_META, schema: 'hsfw', writerKeys: this.writers.map(w => w.publicKey)}
       await this.autobase.append(WorkspaceWriter.packop(meta), null, writer)
 
       // HACK
@@ -642,11 +772,20 @@ export class Workspace {
 
       try {
         // console.debug('OP', this.debugId, op)
-        if (structs.isSetMetaOp(op)) {
-          await b.put('_meta', {
-            schema: op.schema,
-            writerKeys: op.writerKeys
-          })
+        if (structs.isDeclareOp(op)) {
+          if (true /* TODO change.equals(owner)*/) {
+            const indexedMeta: structs.IndexedMeta = {
+              owner: change,
+              ownerIndex: op.index,
+              writers: [{key: change, name: '', admin: true}],
+              timestamp: op.timestamp,
+              change: '',
+              otherChanges: []
+            }
+            await b.put('_meta', indexedMeta)
+          } else {
+            console.error('Error: declaration operation found on non-owner core, key:', change, 'op:', op)
+          }
         } else if (structs.isChangeOp(op)) {
           const pathp = op.path.split('/').filter(Boolean)
           if (pathp.length === 0) {

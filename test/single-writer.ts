@@ -1,8 +1,5 @@
 import ava from 'ava'
-// @ts-ignore no types
-import ram from 'random-access-memory'
-// @ts-ignore no types
-import Corestore from 'corestore'
+import { setupOne } from './util/util.js'
 import * as sfw from '../src/index.js'
 
 ava('single-writer individual file', async t => {
@@ -11,9 +8,7 @@ ava('single-writer individual file', async t => {
     Buffer.from('Hello, universe', 'utf-8')
   ]
 
-  const store = new Corestore(ram)
-  const ws = await sfw.Workspace.createNew(store)
-  t.truthy(ws.key)
+  const {ws} = await setupOne(t)
 
   t.deepEqual(await ws.listFiles('/'), [])
   t.falsy(await ws.statFile('/test.txt'))
@@ -190,9 +185,7 @@ ava('single-writer multiple files', async t => {
     Buffer.from('Hello, universe', 'utf-8')
   ]
 
-  const store = new Corestore(ram)
-  const ws = await sfw.Workspace.createNew(store)
-  t.truthy(ws.key)
+  const {ws} = await setupOne(t)
 
   // first write
 
@@ -279,9 +272,7 @@ ava('single-writer individual file in a folder', async t => {
     Buffer.from('Hello, universe', 'utf-8')
   ]
 
-  const store = new Corestore(ram)
-  const ws = await sfw.Workspace.createNew(store)
-  t.truthy(ws.key)
+  const {ws} = await setupOne(t)
 
   t.deepEqual(await ws.listFiles('/folder'), [])
   t.falsy(await ws.statFile('/folder/test.txt'))
@@ -457,9 +448,7 @@ ava('single-writer copy file', async t => {
     Buffer.from('Hello, world', 'utf-8')
   ]
 
-  const store = new Corestore(ram)
-  const ws = await sfw.Workspace.createNew(store)
-  t.truthy(ws.key)
+  const {ws} = await setupOne(t)
 
   await ws.writeFile('/test1.txt', VALUES[0])
   await ws.copyFile('/test1.txt', '/test2.txt')
@@ -537,9 +526,7 @@ ava('single-writer move file', async t => {
     Buffer.from('Hello, world', 'utf-8')
   ]
 
-  const store = new Corestore(ram)
-  const ws = await sfw.Workspace.createNew(store)
-  t.truthy(ws.key)
+  const {ws} = await setupOne(t)
 
   await ws.writeFile('/test1.txt', VALUES[0])
   await ws.moveFile('/test1.txt', '/test2.txt')

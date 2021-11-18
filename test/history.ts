@@ -1,14 +1,9 @@
 import ava from 'ava'
-// @ts-ignore no types
-import ram from 'random-access-memory'
-// @ts-ignore no types
-import Corestore from 'corestore'
+import { setupOne } from './util/util.js'
 import * as sfw from '../src/index.js'
 
 ava('listHistory filters', async t => {
-  const store = new Corestore(ram)
-  const ws = await sfw.Workspace.createNew(store)
-  t.truthy(ws.key)
+  const { ws } = await setupOne(t)
 
   for (let i = 0; i < 4; i++) {
     await ws.writeFile('/test.txt', ''+i, 'utf8')
@@ -28,9 +23,7 @@ ava('listHistory filters', async t => {
 })
 
 ava('read historic values', async t => {
-  const store = new Corestore(ram)
-  const ws = await sfw.Workspace.createNew(store)
-  t.truthy(ws.key)
+  const { ws } = await setupOne(t)
 
   for (let i = 0; i < 10; i++) {
     await ws.writeFile('/test.txt', ''+i, 'utf8')
