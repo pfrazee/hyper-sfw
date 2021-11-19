@@ -8,7 +8,6 @@ Dropbox-like p2p file syncing built on [Hypercore's new multiwriter Autobase](ht
 
 - [Externalizing blobs to a separate storage and transfer protocol](https://github.com/pfrazee/hyper-sfw/issues/1)
 - [Decaching old core messages](https://github.com/pfrazee/hyper-sfw/issues/2)
-- Writer management (waiting on autoboot)
 - Events / reactive APIs
 - Unique codes on each error
 - BUG: In multiple cases, I needed to read the current state to ensure sync between writers (look for HACKs in code)
@@ -16,10 +15,17 @@ Dropbox-like p2p file syncing built on [Hypercore's new multiwriter Autobase](ht
 ## Example usage
 
 ```typescript
+import crypto from 'hypercore-crypto'
 import { Workspace } from 'hsfw'
 
-const ws = await Workspace.createNew(corestore)
-const ws = await Workspace.load(corestore, workspacePublicKey)
+const mySwarmKeypair = crypto.keyPair()
+const ws = await Workspace.createNew(corestore, mySwarmKeypair)
+const ws = await Workspace.load(corestore, mySwarmKeypair, workspacePublicKey)
+
+// general metadata
+// =
+
+ws.key // the key that identifies this HSFW
 
 // basic file ops
 // =
@@ -48,6 +54,30 @@ await ws.deleteFile('/file3.txt')
 await ws.listHistory()
 await ws.listHistory({path: '/directory/*'})
 await ws.listHistory({path: '/file.txt'})
+
+// writer management
+// =
+
+await ws.listWriters() // fetch and list the current writers
+ws.getWriter(pubkey) /* get one of the writers (from the current cache)
+=> WorkspaceWriter {
+  core: Hypercore
+  publicKey: Buffer
+  secretKey?: Buffer
+  isOwner: boolean
+  name: string
+  isAdmin: boolean
+  isFrozen: boolean
+}*/
+ws.getOwner() // get the "owner" writer of this HSFW
+ws.isOwner // am I the "owner" of this HSFW?
+ws.getMyWriter() // get my writer instance, if I am one
+ws.writable // am I a writer?
+ws.isAdmin // am I an admin writer? (able to change other writers)
+await ws.putWriter(key, {name: 'Bob', admin: false}) // create/update a writer
+
+const invite = await ws.createInvite(recipientName: string) // create a writer invite
+await ws.useInvite(invite) // use the invite to become a writer
 ```
 
 ## Implementation notes
@@ -59,12 +89,27 @@ The repo is an Autobase which uses oplog inputs and a Hyperbee for the index. Al
 The Hyperbee index uses the following layout:
 
 ```
-/_meta = Meta
+/_meta = IndexedMeta
 /files/{...path: string} = IndexedFile
 /changes/{id: string} = IndexedChange
 /history/{mlts: string} = string // mlts is a monotonic lexicographic timestamp
 /blobs/{hash: string} = {}
 /blobchunks/{hash: string}/{chunk: number} = Buffer
+
+IndexedMeta {
+  owner: Buffer // owner key
+  ownerIndex: Buffer // owner's index key
+  writers: IndexedMetaWriter[]
+  timestamp: Date // local clock time of last change
+  change: string // last change id
+
+  IndexedMetaWriter {
+    key: Buffer // writer key
+    name: string // user-facing user name
+    admin: boolean // can assign other writers?
+    frozen: boolean // are further updates disabled?
+  }
+}
 
 IndexedChange {
   id: string // random generated ID
@@ -73,7 +118,7 @@ IndexedChange {
   
   path: string // path of file being changed
   timestamp: Date // local clock time of change
-  details: ChangeOpPut|ChangeOpCopy|ChangeOpDel
+  details: ChangeOpPut|ChangeOpCopy|ChangeOpDel|ChangeOpPutWriter
 }
 
 IndexedFile {
@@ -93,22 +138,22 @@ IndexedFile {
 The oplogs include one of the following message types:
 
 ```
-SetMetaOp {
+DeclareOp {
   op: 1
-  schema: string
-  writerKeys: Buffer[]
+  index: Buffer // key of the owner's index bee
+  timestamp: Date // local clock time of declaration
 }
 
 ChangeOp {
   op: 2
   id: string // random generated ID
   parents: string[] // IDs of changes which preceded this change
-  path: string // path of file being changed
   timestamp: Date // local clock time of change
-  details: ChangeOpPut|ChangeOpCopy|ChangeOpDel
+  details: ChangeOpPut|ChangeOpCopy|ChangeOpDel|ChangeOpPutWriter
 
   ChangeOpPut {
     action: number // OP_CHANGE_ACT_PUT
+    path: string // path of file being changed
     blob: string // sha256 hash of blob to create
     bytes: number // number of bytes in this blob
     chunks: number // number of chunks in the blob (will follow this op)
@@ -117,12 +162,22 @@ ChangeOp {
 
   ChangeOpCopy {
     action: number // OP_CHANGE_ACT_COPY
+    path: string // path of file being changed
     blob: string // sha256 hash of blob to copy
     bytes: number // number of bytes in this blob
   }
 
   ChangeOpDel {
     action: number // OP_CHANGE_ACT_DEL
+    path: string // path of file being changed
+  }
+
+  ChangeOpPutWriter {
+    action: number // OP_CHANGE_ACT_PUT_WRITER
+    key: Buffer // writer's key
+    name?: string // writer's name
+    admin?: boolean // is admin?
+    frozen?: boolean // is frozen?
   }
 }
 
@@ -131,6 +186,29 @@ BlobChunkOp {
   blob: string // sha256 hash of blob
   chunk: number // chunk number
   value: Buffer
+}
+```
+
+### Writer management
+
+The Hypercore team is planning to create "Autoboot," a toolkit for managing writers. In the meantime, HSFW has implemented its own form of writer management.
+
+The basics are pretty straight-forward: to add a writer, create an "invite" with `createInvite()` and send that invite to the other user. That user then calls `useInvite()` and they will be added as a writer. (Note: The creator of the invite has to be online when it runs.)
+
+```js
+// on the existing writer's side
+const inviteCode = await workspace.createInvite('Bob') // bob will be the name assigned to the new writer
+
+// on the joining user's side
+await workspace.useInvite(inviteCode)
+```
+
+You can modify existiing writers with `putWriter()` to change their name or give them admin powers. You must be an admin to add new writers or modify other writers.
+
+```js
+// on the admin's device
+if (workspace.isAdmin) {
+  await workspace.putWriter(bob.key, {name: 'Robert', admin: true})
 }
 ```
 
