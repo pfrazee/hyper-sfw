@@ -10,6 +10,7 @@ Dropbox-like p2p file syncing built on [Hypercore's new multiwriter Autobase](ht
 - [Decaching old core messages](https://github.com/pfrazee/hyper-sfw/issues/2)
 - Writer management (waiting on autoboot)
 - Events / reactive APIs
+- Unique codes on each error
 - BUG: In multiple cases, I needed to read the current state to ensure sync between writers (look for HACKs in code)
 
 ## Example usage

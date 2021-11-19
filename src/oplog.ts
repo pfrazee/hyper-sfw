@@ -11,18 +11,21 @@ export interface WorkspaceWriterOpts {
   isOwner?: boolean
   name?: string
   isAdmin?: boolean
+  isFrozen?: boolean
 }
 
 export class WorkspaceWriter extends BaseWorkspaceCore {
   isOwner = false
   name = ''
   isAdmin = false
+  isFrozen  =  false
 
   constructor (store: Corestore, publicKey: Buffer, secretKey: Buffer|undefined, opts?: WorkspaceWriterOpts) {
     super(store, publicKey, secretKey)
     this.isOwner = opts?.isOwner || false
     this.name = opts?.name || ''
     this.isAdmin = opts?.isAdmin || false
+    this.isFrozen = opts?.isFrozen || false
   }
 
   static createNew (store: Corestore, opts?: WorkspaceWriterOpts) {
@@ -30,7 +33,7 @@ export class WorkspaceWriter extends BaseWorkspaceCore {
     return new WorkspaceWriter(store, keyPair.publicKey, keyPair.secretKey, opts)
   }
 
-  static load (store: Corestore, publicKey: string, secretKey?: string, opts?: WorkspaceWriterOpts) {
+  static load (store: Corestore, publicKey: string|Buffer, secretKey?: string|Buffer, opts?: WorkspaceWriterOpts) {
     return new WorkspaceWriter(
       store,
       toBuffer(publicKey),
