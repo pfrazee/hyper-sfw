@@ -189,7 +189,8 @@ export class Workspace {
     return workspace
   }
 
-  static async load (store: Corestore, swarmKeyPair: KeyPair, publicKey: string) {
+  static async load (store: Corestore, swarmKeyPair: KeyPair, publicKey: Buffer|string) {
+    publicKey = toBuffer(publicKey)
     const ownerWriter = await WorkspaceWriter.load(store, publicKey, undefined, {isOwner: true, isAdmin: true})
     await ownerWriter.core.ready()
     const localIndex = WorkspaceIndex.createNew(store, false)
@@ -282,6 +283,8 @@ export class Workspace {
     const writer = this.getMyWriter()
     if (!writer) throw new Error(`Can't modify writers: not a writer`)
     if (!writer.isAdmin && !writer.publicKey.equals(key)) throw new Error(`Can't modify other writers: not an admin`)
+    if (!writer.isAdmin && admin) throw new Error(`Can't modify admin settings: not an admin`)
+    if (!writer.isAdmin && frozen) throw new Error(`Can't modify frozen settings: not an admin`)
     await this.autobase.append(WorkspaceWriter.packop({
       op: structs.OP_CHANGE,
       id: genId(),
@@ -931,18 +934,19 @@ export class Workspace {
       console.error('Non-admin attempted to edit writers, key:', change, 'op:', op)
       return
     }
+    const hasAdminPowers = writer.isAdmin
 
     const existingEntry = currIndexedMeta.writers.find((w: structs.IndexedMetaWriter) => w.key.equals(putWriterDetails.key))
     if (existingEntry) {
-      if ('name' in putWriterDetails) existingEntry.name = putWriterDetails.name || existingEntry.name
-      if ('admin' in putWriterDetails) existingEntry.admin = putWriterDetails.admin || existingEntry.admin
-      if ('frozen' in putWriterDetails) existingEntry.frozen = putWriterDetails.frozen || existingEntry.frozen
+      if ('name' in putWriterDetails) existingEntry.name = isString(putWriterDetails.name) ? putWriterDetails.name : existingEntry.name
+      if (hasAdminPowers && 'admin' in putWriterDetails) existingEntry.admin = isBoolean(putWriterDetails.admin) ? putWriterDetails.admin : existingEntry.admin
+      if (hasAdminPowers && 'frozen' in putWriterDetails) existingEntry.frozen = isBoolean(putWriterDetails.frozen) ? putWriterDetails.frozen : existingEntry.frozen
     } else {
       const indexedMetaWriter: structs.IndexedMetaWriter = {
         key: putWriterDetails.key,
         name: putWriterDetails.name || '',
-        admin: putWriterDetails.admin || false,
-        frozen: putWriterDetails.frozen || false
+        admin: hasAdminPowers && Boolean(putWriterDetails.admin),
+        frozen: hasAdminPowers && Boolean(putWriterDetails.frozen)
       }
       currIndexedMeta.writers.push(indexedMetaWriter)
     }
@@ -952,4 +956,12 @@ export class Workspace {
     await b.put('_meta', currIndexedMeta)
     await this._loadFromMeta(currIndexedMeta)
   }
+}
+
+function isString (v: any): v is string {
+  return typeof v === 'string'
+}
+
+function isBoolean (v: any): v is boolean {
+  return typeof v === 'boolean'
 }
