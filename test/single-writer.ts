@@ -1,8 +1,5 @@
 import ava from 'ava'
-// @ts-ignore no types
-import ram from 'random-access-memory'
-// @ts-ignore no types
-import Corestore from 'corestore'
+import { setupOne } from './util/util.js'
 import * as sfw from '../src/index.js'
 
 ava('single-writer individual file', async t => {
@@ -11,9 +8,7 @@ ava('single-writer individual file', async t => {
     Buffer.from('Hello, universe', 'utf-8')
   ]
 
-  const store = new Corestore(ram)
-  const ws = await sfw.Workspace.createNew(store)
-  t.truthy(ws.key)
+  const {ws} = await setupOne(t)
 
   t.deepEqual(await ws.listFiles('/'), [])
   t.falsy(await ws.statFile('/test.txt'))
@@ -57,9 +52,9 @@ ava('single-writer individual file', async t => {
       t.is(history[0].id, info.change)
       t.is(history[0].parents.length, 0)
       t.truthy(history[0].writer.equals(ws.writers[0].publicKey))
-      t.is(history[0].path, '/test.txt')
       t.deepEqual(history[0].timestamp, info.timestamp)
       t.is(history[0].details.action, sfw.OP_CHANGE_ACT_PUT)
+      t.is((history[0].details as sfw.ChangeOpPut).path, '/test.txt')
       t.is(typeof (history[0].details as sfw.ChangeOpPut).blob, 'string')
       t.is((history[0].details as sfw.ChangeOpPut).bytes, info.bytes)
     }
@@ -103,9 +98,9 @@ ava('single-writer individual file', async t => {
       t.is(history[1].id, info.change)
       t.is(history[1].parents.length, 1)
       t.truthy(history[1].writer.equals(ws.writers[0].publicKey))
-      t.is(history[1].path, '/test.txt')
       t.deepEqual(history[1].timestamp, info.timestamp)
       t.is(history[1].details.action, sfw.OP_CHANGE_ACT_PUT)
+      t.is((history[1].details as sfw.ChangeOpPut).path, '/test.txt')
       t.is(typeof (history[1].details as sfw.ChangeOpPut).blob, 'string')
       t.is((history[1].details as sfw.ChangeOpPut).bytes, info.bytes)
     }
@@ -132,8 +127,8 @@ ava('single-writer individual file', async t => {
     t.is(typeof history[2].id, 'string')
     t.is(history[2].parents.length, 1)
     t.truthy(history[2].writer.equals(ws.writers[0].publicKey))
-    t.is(history[2].path, '/test.txt')
     t.truthy(history[2].timestamp instanceof Date)
+    t.is((history[2].details as sfw.ChangeOpDel).path, '/test.txt')
     t.is(history[2].details.action, sfw.OP_CHANGE_ACT_DEL)
   }
 
@@ -175,9 +170,9 @@ ava('single-writer individual file', async t => {
       t.is(history[3].id, info.change)
       t.is(history[3].parents.length, 0)
       t.truthy(history[3].writer.equals(ws.writers[0].publicKey))
-      t.is(history[3].path, '/test.txt')
       t.deepEqual(history[3].timestamp, info.timestamp)
       t.is(history[3].details.action, sfw.OP_CHANGE_ACT_PUT)
+      t.is((history[3].details as sfw.ChangeOpPut).path, '/test.txt')
       t.is(typeof (history[3].details as sfw.ChangeOpPut).blob, 'string')
       t.is((history[3].details as sfw.ChangeOpPut).bytes, info.bytes)
     }
@@ -190,9 +185,7 @@ ava('single-writer multiple files', async t => {
     Buffer.from('Hello, universe', 'utf-8')
   ]
 
-  const store = new Corestore(ram)
-  const ws = await sfw.Workspace.createNew(store)
-  t.truthy(ws.key)
+  const {ws} = await setupOne(t)
 
   // first write
 
@@ -254,9 +247,9 @@ ava('single-writer multiple files', async t => {
       t.is(history[0].id, info1.change)
       t.is(history[0].parents.length, 0)
       t.truthy(history[0].writer.equals(ws.writers[0].publicKey))
-      t.is(history[0].path, '/test1.txt')
       t.deepEqual(history[0].timestamp, info1.timestamp)
       t.is(history[0].details.action, sfw.OP_CHANGE_ACT_PUT)
+      t.is((history[0].details as sfw.ChangeOpPut).path, '/test1.txt')
       t.is(typeof (history[0].details as sfw.ChangeOpPut).blob, 'string')
       t.is((history[0].details as sfw.ChangeOpPut).bytes, info1.bytes)
     }
@@ -264,9 +257,9 @@ ava('single-writer multiple files', async t => {
       t.is(history[1].id, info2.change)
       t.is(history[1].parents.length, 0)
       t.truthy(history[1].writer.equals(ws.writers[0].publicKey))
-      t.is(history[1].path, '/test2.txt')
       t.deepEqual(history[1].timestamp, info2.timestamp)
       t.is(history[1].details.action, sfw.OP_CHANGE_ACT_PUT)
+      t.is((history[1].details as sfw.ChangeOpPut).path, '/test2.txt')
       t.is(typeof (history[1].details as sfw.ChangeOpPut).blob, 'string')
       t.is((history[1].details as sfw.ChangeOpPut).bytes, info2.bytes)
     }
@@ -279,9 +272,7 @@ ava('single-writer individual file in a folder', async t => {
     Buffer.from('Hello, universe', 'utf-8')
   ]
 
-  const store = new Corestore(ram)
-  const ws = await sfw.Workspace.createNew(store)
-  t.truthy(ws.key)
+  const {ws} = await setupOne(t)
 
   t.deepEqual(await ws.listFiles('/folder'), [])
   t.falsy(await ws.statFile('/folder/test.txt'))
@@ -325,9 +316,9 @@ ava('single-writer individual file in a folder', async t => {
       t.is(history[0].id, info.change)
       t.is(history[0].parents.length, 0)
       t.truthy(history[0].writer.equals(ws.writers[0].publicKey))
-      t.is(history[0].path, '/folder/test.txt')
       t.deepEqual(history[0].timestamp, info.timestamp)
       t.is(history[0].details.action, sfw.OP_CHANGE_ACT_PUT)
+      t.is((history[0].details as sfw.ChangeOpPut).path, '/folder/test.txt')
       t.is(typeof (history[0].details as sfw.ChangeOpPut).blob, 'string')
       t.is((history[0].details as sfw.ChangeOpPut).bytes, info.bytes)
     }
@@ -371,9 +362,9 @@ ava('single-writer individual file in a folder', async t => {
       t.is(history[1].id, info.change)
       t.is(history[1].parents.length, 1)
       t.truthy(history[1].writer.equals(ws.writers[0].publicKey))
-      t.is(history[1].path, '/folder/test.txt')
       t.deepEqual(history[1].timestamp, info.timestamp)
       t.is(history[1].details.action, sfw.OP_CHANGE_ACT_PUT)
+      t.is((history[1].details as sfw.ChangeOpPut).path, '/folder/test.txt')
       t.is(typeof (history[1].details as sfw.ChangeOpPut).blob, 'string')
       t.is((history[1].details as sfw.ChangeOpPut).bytes, info.bytes)
     }
@@ -400,9 +391,9 @@ ava('single-writer individual file in a folder', async t => {
     t.is(typeof history[2].id, 'string')
     t.is(history[2].parents.length, 1)
     t.truthy(history[2].writer.equals(ws.writers[0].publicKey))
-    t.is(history[2].path, '/folder/test.txt')
     t.truthy(history[2].timestamp instanceof Date)
     t.is(history[2].details.action, sfw.OP_CHANGE_ACT_DEL)
+    t.is((history[2].details as sfw.ChangeOpDel).path, '/folder/test.txt')
   }
 
   // third write
@@ -443,9 +434,9 @@ ava('single-writer individual file in a folder', async t => {
       t.is(history[3].id, info.change)
       t.is(history[3].parents.length, 0)
       t.truthy(history[3].writer.equals(ws.writers[0].publicKey))
-      t.is(history[3].path, '/folder/test.txt')
       t.deepEqual(history[3].timestamp, info.timestamp)
       t.is(history[3].details.action, sfw.OP_CHANGE_ACT_PUT)
+      t.is((history[3].details as sfw.ChangeOpPut).path, '/folder/test.txt')
       t.is(typeof (history[3].details as sfw.ChangeOpPut).blob, 'string')
       t.is((history[3].details as sfw.ChangeOpPut).bytes, info.bytes)
     }
@@ -457,9 +448,7 @@ ava('single-writer copy file', async t => {
     Buffer.from('Hello, world', 'utf-8')
   ]
 
-  const store = new Corestore(ram)
-  const ws = await sfw.Workspace.createNew(store)
-  t.truthy(ws.key)
+  const {ws} = await setupOne(t)
 
   await ws.writeFile('/test1.txt', VALUES[0])
   await ws.copyFile('/test1.txt', '/test2.txt')
@@ -513,9 +502,9 @@ ava('single-writer copy file', async t => {
       t.is(history[0].id, info1.change)
       t.is(history[0].parents.length, 0)
       t.truthy(history[0].writer.equals(ws.writers[0].publicKey))
-      t.is(history[0].path, '/test1.txt')
       t.deepEqual(history[0].timestamp, info1.timestamp)
       t.is(history[0].details.action, sfw.OP_CHANGE_ACT_PUT)
+      t.is((history[0].details as sfw.ChangeOpPut).path, '/test1.txt')
       t.is(typeof (history[0].details as sfw.ChangeOpPut).blob, 'string')
       t.is((history[0].details as sfw.ChangeOpPut).bytes, info1.bytes)
     }
@@ -523,9 +512,9 @@ ava('single-writer copy file', async t => {
       t.is(history[1].id, info2.change)
       t.is(history[1].parents.length, 0)
       t.truthy(history[1].writer.equals(ws.writers[0].publicKey))
-      t.is(history[1].path, '/test2.txt')
       t.deepEqual(history[1].timestamp, info2.timestamp)
       t.is(history[1].details.action, sfw.OP_CHANGE_ACT_COPY)
+      t.is((history[1].details as sfw.ChangeOpCopy).path, '/test2.txt')
       t.is(typeof (history[1].details as sfw.ChangeOpCopy).blob, 'string')
       t.is((history[1].details as sfw.ChangeOpCopy).bytes, info2.bytes)
     }
@@ -537,9 +526,7 @@ ava('single-writer move file', async t => {
     Buffer.from('Hello, world', 'utf-8')
   ]
 
-  const store = new Corestore(ram)
-  const ws = await sfw.Workspace.createNew(store)
-  t.truthy(ws.key)
+  const {ws} = await setupOne(t)
 
   await ws.writeFile('/test1.txt', VALUES[0])
   await ws.moveFile('/test1.txt', '/test2.txt')
@@ -578,9 +565,9 @@ ava('single-writer move file', async t => {
     t.is(typeof history[0].id, 'string')
     t.is(history[0].parents.length, 0)
     t.truthy(history[0].writer.equals(ws.writers[0].publicKey))
-    t.is(history[0].path, '/test1.txt')
     t.truthy(history[0].timestamp instanceof Date)
     t.is(history[0].details.action, sfw.OP_CHANGE_ACT_PUT)
+    t.is((history[0].details as sfw.ChangeOpPut).path, '/test1.txt')
     t.is(typeof (history[0].details as sfw.ChangeOpPut).blob, 'string')
     if (info2) {
       t.is((history[0].details as sfw.ChangeOpPut).bytes, info2.bytes)
@@ -590,9 +577,9 @@ ava('single-writer move file', async t => {
       t.is(history[1].id, info2.change)
       t.is(history[1].parents.length, 0)
       t.truthy(history[1].writer.equals(ws.writers[0].publicKey))
-      t.is(history[1].path, '/test2.txt')
       t.deepEqual(history[1].timestamp, info2.timestamp)
       t.is(history[1].details.action, sfw.OP_CHANGE_ACT_COPY)
+      t.is((history[1].details as sfw.ChangeOpCopy).path, '/test2.txt')
       t.is(typeof (history[1].details as sfw.ChangeOpCopy).blob, 'string')
       t.is((history[1].details as sfw.ChangeOpCopy).bytes, info2.bytes)
     }
@@ -600,8 +587,8 @@ ava('single-writer move file', async t => {
     t.is(typeof history[2].id, 'string')
     t.is(history[2].parents.length, 1)
     t.truthy(history[2].writer.equals(ws.writers[0].publicKey))
-    t.is(history[2].path, '/test1.txt')
     t.truthy(history[2].timestamp instanceof Date)
     t.is(history[2].details.action, sfw.OP_CHANGE_ACT_DEL)
+    t.is((history[2].details as sfw.ChangeOpDel).path, '/test1.txt')
   }
 })

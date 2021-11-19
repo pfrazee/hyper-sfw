@@ -6,6 +6,6 @@ export function hash (buf: Buffer): string {
   return `sha256-${hashSum.digest('hex')}`
 }
 
-export function genId () {
-  return randomBytes(8).toString('hex')
+export function genId (len = 8) {
+  return randomBytes(len).toString('hex')
 }
