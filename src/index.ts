@@ -415,9 +415,9 @@ export class Workspace {
   }
 
   async listFiles (path = '/', opts?: any): Promise<structs.FileInfo[]> {
+    await this.indexCore.update()
     const self = this
     const sub = this._filepathTraverse(path.split('/').filter(Boolean))
-    await this.indexCore.update()
     return await new Promise((resolve, reject) => {
       pump(
         sub.createReadStream(opts),
@@ -450,11 +450,11 @@ export class Workspace {
   }
 
   async readFile (path: string, opts?: string|ReadFileOpts): Promise<Buffer|string|undefined> {
+    await this.indexCore.update()
+
     if (typeof opts === 'string') {
       opts = {encoding: opts}
     }
-
-    await this.indexCore.update()
 
     let blob
     if (typeof opts?.change === 'string') {
@@ -497,6 +497,7 @@ export class Workspace {
   }
 
   async writeFile (path: string, value: Buffer|string, opts?: string|WriteFileOpts) {
+    await this.indexCore.update()
     if (typeof opts === 'string') {
       opts = {encoding: opts}
     }
@@ -550,8 +551,6 @@ export class Workspace {
     } finally {
       release()
     }
-    // HACK force to get indexed
-    await this.statFile(path)
   }
 
   async moveFile (srcPath: string, dstPath: string) {
@@ -595,8 +594,6 @@ export class Workspace {
     } finally {
       release()
     }
-    // HACK force to get indexed
-    await this.statFile(dstPath)
   }
 
   async copyFile (srcPath: string, dstPath: string) {
@@ -629,11 +626,10 @@ export class Workspace {
     } finally {
       release()
     }
-    // HACK force to get indexed
-    await this.statFile(dstPath)
   }
 
   async deleteFile (path: string) {
+    await this.indexCore.update()
     path = `/${path.split('/').filter(Boolean).join('/')}`
     const writerCore = this.getMyWriterCore()
     const release = await lock(`write:${this.key.toString('hex')}`)
@@ -652,9 +648,6 @@ export class Workspace {
     } finally {
       release()
     }
-
-    // HACK force to get indexed
-    await this.statFile(path)
   }
 
   // history

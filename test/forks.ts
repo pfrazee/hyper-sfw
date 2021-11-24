@@ -1,6 +1,5 @@
 import ava from 'ava'
 import { setupTwo } from './util/util.js'
-import * as sfw from '../src/index.js'
 
 ava('conflicting and merging writes to individual file', async t => {
   const VALUES = [
@@ -13,8 +12,8 @@ ava('conflicting and merging writes to individual file', async t => {
   // conflicting writes
 
   // HACK sync state prior to disconnect, works around https://github.com/hypercore-protocol/autobase/issues/7
-  await ws1.listFiles()
-  await ws2.listFiles()
+  await ws1.indexCore.update()
+  await ws2.indexCore.update()
 
   console.log('\nDISCONNECT\n')
   sim.disconnect(sim.stores[0], sim.stores[1])
@@ -88,8 +87,8 @@ ava('conflicting and merging writes & deletes to individual file', async t => {
   // conflicting write & delete
 
   // HACK sync state prior to disconnect, works around https://github.com/hypercore-protocol/autobase/issues/7
-  await ws1.listFiles()
-  await ws2.listFiles()
+  await ws1.indexCore.update()
+  await ws2.indexCore.update()
 
   console.log('\nDISCONNECT\n')
   sim.disconnect(sim.stores[0], sim.stores[1])
@@ -167,8 +166,8 @@ ava('conflicting and merging writes & moves to individual file', async t => {
   // conflicting write & delete
 
   // HACK sync state prior to disconnect, works around https://github.com/hypercore-protocol/autobase/issues/7
-  await ws1.listFiles()
-  await ws2.listFiles()
+  await ws1.indexCore.update()
+  await ws2.indexCore.update()
 
   console.log('\nDISCONNECT\n')
   sim.disconnect(sim.stores[0], sim.stores[1])
@@ -245,8 +244,8 @@ ava('conflicting and merging writes & copies to individual file', async t => {
   // conflicting write & delete
 
   // HACK sync state prior to disconnect, works around https://github.com/hypercore-protocol/autobase/issues/7
-  await ws1.listFiles()
-  await ws2.listFiles()
+  await ws1.indexCore.update()
+  await ws2.indexCore.update()
 
   console.log('\nDISCONNECT\n')
   sim.disconnect(sim.stores[0], sim.stores[1])
