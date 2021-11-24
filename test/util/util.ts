@@ -30,10 +30,11 @@ class Sim {
   async cloneWorkspace (store: Corestore, swarmKeyPair: sfw.KeyPair, ws1: sfw.Workspace) {
     const ws2 = await sfw.Workspace.load(store, swarmKeyPair, ws1.key.toString('hex'))
     
-    // const writer2 = await ws2._createWriter()
-    // await ws1.putWriter(writer2.publicKey, {name: 'second writer'})
-    const invite = await ws1.createInvite('Second writer')
-    const writer2 = await ws2.useInvite(invite)
+    // TODO: use invite flows once we solve the wire protocol bug
+    const writer2 = await ws2._createWriter()
+    await ws1.putWriter(writer2.publicKey, {name: 'second writer'})
+    // const invite = await ws1.createInvite('Second writer')
+    // const writer2 = await ws2.useInvite(invite)
 
     this.workspaces.push(ws2)
     this.writers.push(writer2)

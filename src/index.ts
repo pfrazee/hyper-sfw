@@ -93,6 +93,7 @@ export class Workspace {
   debugId = `Workspace${_debugIdCounter++}`
   autobase: Autobase
   indexBee: Hyperbee
+  indexCore: Hypercore
   store: Corestore
 
   writers: WorkspaceWriter[]
@@ -109,13 +110,13 @@ export class Workspace {
     const inputs = this.writers.map(w => w.core)
     const defaultInput = inputs.find(core => core.writable)
 
-    this.autobase = new Autobase(inputs, {indexes: indexes.map(idx => idx.core), input: defaultInput})
+    this.autobase = new Autobase(inputs, {outputs: indexes.map(idx => idx.core), input: defaultInput})
 
-    const indexCore = this.autobase.createRebasedIndex({
+    this.indexCore = this.autobase.linearize({
       unwrap: true,
       apply: this._apply.bind(this)
     })
-    this.indexBee = new Hyperbee(indexCore, {
+    this.indexBee = new Hyperbee(this.indexCore, {
       extension: false,
       keyEncoding: 'utf-8',
       valueEncoding: {
@@ -279,7 +280,7 @@ export class Workspace {
 
   async putWriter (key: Buffer, {name, admin, frozen}: {name?: string, admin?: boolean, frozen?: boolean} = {}) {
     await this._loadFromMeta() // ensure writers are fresh
-
+    
     const writer = this.getMyWriter()
     if (!writer) throw new Error(`Can't modify writers: not a writer`)
     if (!writer.isAdmin && !writer.publicKey.equals(key)) throw new Error(`Can't modify other writers: not an admin`)
@@ -416,6 +417,7 @@ export class Workspace {
   async listFiles (path = '/', opts?: any): Promise<structs.FileInfo[]> {
     const self = this
     const sub = this._filepathTraverse(path.split('/').filter(Boolean))
+    await this.indexCore.update()
     return await new Promise((resolve, reject) => {
       pump(
         sub.createReadStream(opts),
@@ -441,6 +443,7 @@ export class Workspace {
   }
 
   async statFile (path: string): Promise<structs.FileInfo|undefined> {
+    await this.indexCore.update()
     const indexedFile = await this._getIndexedFile(path)
     if (!indexedFile) return undefined
     return await this._getFileInfo(indexedFile)
@@ -450,6 +453,8 @@ export class Workspace {
     if (typeof opts === 'string') {
       opts = {encoding: opts}
     }
+
+    await this.indexCore.update()
 
     let blob
     if (typeof opts?.change === 'string') {
@@ -468,6 +473,7 @@ export class Workspace {
   }
 
   async readAllFileStates (path: string): Promise<{writer: Buffer, data: Buffer}[]> {
+    await this.indexCore.update()
     const indexedFile = await this._getIndexedFile(path)
     if (!indexedFile) return []
 
@@ -549,6 +555,7 @@ export class Workspace {
   }
 
   async moveFile (srcPath: string, dstPath: string) {
+    await this.indexCore.update()
     srcPath = `/${srcPath.split('/').filter(Boolean).join('/')}`
     dstPath = `/${dstPath.split('/').filter(Boolean).join('/')}`
     const writerCore = this.getMyWriterCore()
@@ -593,6 +600,7 @@ export class Workspace {
   }
 
   async copyFile (srcPath: string, dstPath: string) {
+    await this.indexCore.update()
     srcPath = `/${srcPath.split('/').filter(Boolean).join('/')}`
     dstPath = `/${dstPath.split('/').filter(Boolean).join('/')}`
     const writerCore = this.getMyWriterCore()
@@ -653,11 +661,13 @@ export class Workspace {
   // =
 
   async getChange (changeId: string): Promise<structs.IndexedChange|undefined> {
+    await this.indexCore.update()
     const entry = await this.indexBee.sub('changes').get(changeId)
     if (structs.isIndexedChange(entry?.value)) return entry.value
   }
 
   async listHistory (opts?: any): Promise<structs.IndexedChange[]> {
+    await this.indexCore.update()
     const self = this
     const matcher = typeof opts?.path === 'string' ? match.matcher(opts.path) : undefined
     return await new Promise((resolve, reject) => {
@@ -718,7 +728,7 @@ export class Workspace {
   }
 
   async _readDeclaration (core: Hypercore): Promise<structs.DeclareOp> {
-    const chunk = await this.autobase._getInputNode(core, 1)
+    const chunk = await this.autobase._getInputNode(core, 0)
     const op = WorkspaceWriter.unpackop(chunk.value)
     if (structs.isDeclareOp(op)) {
       return op
@@ -727,15 +737,18 @@ export class Workspace {
   }
 
   async _loadFromDeclaration (core: Hypercore): Promise<void> {
+    await this.indexCore.update()
     const declOp = await this._readDeclaration(core)
     const ownerIndex = WorkspaceIndex.load(this.store, declOp.index, undefined, true)
     await ownerIndex.core.ready()
     this.indexes.push(ownerIndex)
-    this.autobase.addDefaultIndex(ownerIndex.core)
+    this.autobase.addDefaultOutput(ownerIndex.core)
     this._setupWireExtensions()
   }
 
   async _loadFromMeta (meta?: structs.IndexedMeta): Promise<void> {
+    // TODO: why does this fail?
+    // await this.indexCore.update()
     if (!meta) {
       const metaEntry = await this.indexBee.get('_meta')
       meta = structs.isIndexedMeta(metaEntry?.value) ? metaEntry.value : undefined
